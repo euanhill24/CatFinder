@@ -74,13 +74,15 @@ async function enrichListing(listing) {
   userContent.push({ type: 'text', text: parts.join('\n') });
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-5-20250514',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 512,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userContent }],
   });
 
-  const text = response.content[0].text.trim();
+  let text = response.content[0].text.trim();
+  // Strip markdown code fences if present
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/,'');
   const parsed = JSON.parse(text);
 
   const score_alone = clamp(parsed.score_alone);
