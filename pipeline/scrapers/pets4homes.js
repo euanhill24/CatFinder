@@ -9,6 +9,20 @@ const BASE_URL = 'https://www.pets4homes.co.uk/sale/cats/ragdoll/';
 const MAX_PAGES = 2;
 const DELAY_MS = 500;
 
+const BOILERPLATE = [
+  'other than their own home',
+  'scrupulous setters',
+  'pets4homes',
+  'cookie',
+  'sign in',
+  'sign up',
+  'privacy policy',
+  'terms of use',
+  'accept all',
+  'we use cookies',
+  'report this advert',
+];
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -22,7 +36,6 @@ function parsePrice(text) {
 
 function parseAge(text) {
   if (!text) return null;
-  // "8 weeks" → convert to months
   const weeksMatch = text.match(/(\d+)\s*weeks?/i);
   if (weeksMatch) return Math.max(1, Math.round(parseInt(weeksMatch[1]) / 4.33));
 
@@ -43,9 +56,80 @@ function parseSex(text) {
   return 'unknown';
 }
 
+function containsBoilerplate(text) {
+  const lower = text.toLowerCase();
+  return BOILERPLATE.some(b => lower.includes(b));
+}
+
+function extractDescription(md) {
+  // Strategy 1: Find section-based description
+  const sectionMatch = md.match(/(?:^|\n)#+\s*(?:Description|About this pet|About me|About)[^\n]*\n([\s\S]*?)(?=\n#+\s|\n---|\n\||\Z)/i);
+  if (sectionMatch) {
+    const text = sectionMatch[1].trim();
+    const cleaned = text.split('\n')
+      .filter(l => !containsBoilerplate(l) && !l.startsWith('!') && !l.match(/^\[/))
+      .join('\n')
+      .trim();
+    if (cleaned.length >= 50) return cleaned;
+  }
+
+  // Strategy 2: Find longest contiguous plain text block
+  const lines = md.split('\n');
+  let bestBlock = '';
+  let currentBlock = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Skip non-prose lines
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('|') || trimmed.startsWith('[') || trimmed.startsWith('!') || trimmed.match(/^[-*]\s/) || containsBoilerplate(trimmed)) {
+      if (currentBlock.length > bestBlock.length) bestBlock = currentBlock;
+      currentBlock = '';
+      continue;
+    }
+    currentBlock += (currentBlock ? '\n' : '') + trimmed;
+  }
+  if (currentBlock.length > bestBlock.length) bestBlock = currentBlock;
+
+  if (bestBlock.length >= 50) return bestBlock;
+
+  // Fallback: null if nothing good
+  return null;
+}
+
+function extractLocation(md, url) {
+  // Try structured fields
+  const locMatch = md.match(/(?:Location|Based in|Located in)[:\s]+([^\n]+)/i);
+  if (locMatch) {
+    const loc = locMatch[1].trim();
+    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
+  }
+
+  const areaMatch = md.match(/(?:Area|City|Town)[:\s]+([^\n]+)/i);
+  if (areaMatch) {
+    const loc = areaMatch[1].trim();
+    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
+  }
+
+  // Try table patterns: | Location | Edinburgh |
+  const tableMatch = md.match(/\|\s*Location\s*\|\s*([^|]+)\|/i);
+  if (tableMatch) {
+    const loc = tableMatch[1].trim();
+    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
+  }
+
+  // Fallback: parse from URL slug
+  if (url) {
+    const slugMatch = url.match(/\/classifieds\/[^/]+-in-([^/]+)/i);
+    if (slugMatch) {
+      return slugMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+  }
+
+  return null;
+}
+
 function extractListingUrls(markdown) {
   const urls = [];
-  // Match Pets4Homes listing URLs
   const regex = /https:\/\/www\.pets4homes\.co\.uk\/classifieds\/[^\s)\]"]+/g;
   let match;
   while ((match = regex.exec(markdown)) !== null) {
@@ -68,26 +152,17 @@ async function scrapeListingPage(url) {
   // Extract price
   const price = parsePrice(md);
 
-  // Extract age from structured fields or description
+  // Extract age
   const age_months = parseAge(md);
 
   // Extract sex
   const sex = parseSex(md);
 
-  // Extract location — look for location patterns
-  let location_raw = null;
-  const locMatch = md.match(/(?:Location|Based in|Located in)[:\s]+([^\n]+)/i);
-  if (locMatch) {
-    location_raw = locMatch[1].trim();
-  } else {
-    // Try to find a place name pattern after common fields
-    const areaMatch = md.match(/(?:Area|City|Town)[:\s]+([^\n]+)/i);
-    if (areaMatch) location_raw = areaMatch[1].trim();
-  }
+  // Extract location
+  const location_raw = extractLocation(md, url);
 
-  // Extract description — take a meaningful chunk of text
-  const lines = md.split('\n').filter(l => l.trim().length > 40 && !l.startsWith('#') && !l.startsWith('|'));
-  const description = lines.slice(0, 10).join(' ').trim() || md.slice(0, 1000);
+  // Extract description
+  const description = extractDescription(md);
 
   // Extract photo URLs
   const photoRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
@@ -96,7 +171,6 @@ async function scrapeListingPage(url) {
   while ((photoMatch = photoRegex.exec(md)) !== null) {
     if (!photo_urls.includes(photoMatch[1])) photo_urls.push(photoMatch[1]);
   }
-  // Also check for image URLs in metadata
   if (result.metadata && result.metadata.ogImage) {
     const ogImg = result.metadata.ogImage;
     if (!photo_urls.includes(ogImg)) photo_urls.unshift(ogImg);
@@ -143,7 +217,6 @@ async function scrapePets4Homes() {
     if (page < MAX_PAGES) await sleep(DELAY_MS);
   }
 
-  // Deduplicate URLs
   const uniqueUrls = [...new Set(allListingUrls)];
   console.log(`  ${uniqueUrls.length} unique listing URLs to scrape`);
 

@@ -9,6 +9,20 @@ const BASE_URL = 'https://www.gumtree.com/cats-kittens-for-sale/uk/ragdoll';
 const MAX_PAGES = 2;
 const DELAY_MS = 500;
 
+const BOILERPLATE = [
+  'gumtree',
+  'cookie',
+  'sign in',
+  'sign up',
+  'privacy policy',
+  'terms of use',
+  'accept all',
+  'we use cookies',
+  'report this ad',
+  'safety tips',
+  'posting an ad',
+];
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -44,6 +58,60 @@ function parseSex(text) {
   return 'unknown';
 }
 
+function containsBoilerplate(text) {
+  const lower = text.toLowerCase();
+  return BOILERPLATE.some(b => lower.includes(b));
+}
+
+function extractDescription(md) {
+  // Strategy 1: Find section-based description
+  const sectionMatch = md.match(/(?:^|\n)#+\s*(?:Description|About this item|About|Details|Seller's description)[^\n]*\n([\s\S]*?)(?=\n#+\s|\n---|\n\||\Z)/i);
+  if (sectionMatch) {
+    const text = sectionMatch[1].trim();
+    const cleaned = text.split('\n')
+      .filter(l => !containsBoilerplate(l) && !l.startsWith('!') && !l.match(/^\[/))
+      .join('\n')
+      .trim();
+    if (cleaned.length >= 50) return cleaned;
+  }
+
+  // Strategy 2: Find longest contiguous plain text block
+  const lines = md.split('\n');
+  let bestBlock = '';
+  let currentBlock = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('|') || trimmed.startsWith('[') || trimmed.startsWith('!') || trimmed.match(/^[-*]\s/) || containsBoilerplate(trimmed)) {
+      if (currentBlock.length > bestBlock.length) bestBlock = currentBlock;
+      currentBlock = '';
+      continue;
+    }
+    currentBlock += (currentBlock ? '\n' : '') + trimmed;
+  }
+  if (currentBlock.length > bestBlock.length) bestBlock = currentBlock;
+
+  if (bestBlock.length >= 50) return bestBlock;
+
+  return null;
+}
+
+function extractLocation(md) {
+  const locMatch = md.match(/(?:Location|Posted in|Area)[:\s]+([^\n]+)/i);
+  if (locMatch) {
+    const loc = locMatch[1].trim();
+    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
+  }
+
+  const tableMatch = md.match(/\|\s*Location\s*\|\s*([^|]+)\|/i);
+  if (tableMatch) {
+    const loc = tableMatch[1].trim();
+    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
+  }
+
+  return null;
+}
+
 function extractListingUrls(markdown) {
   const urls = [];
   const regex = /https:\/\/www\.gumtree\.com\/p\/[^\s)\]"]+/g;
@@ -65,15 +133,14 @@ async function scrapeListingPage(url) {
   const titleMatch = md.match(/^#\s+(.+)/m);
   const title = titleMatch ? titleMatch[1].trim() : null;
 
-  // Extract price — handle "Free", "£850 ONO", etc.
+  // Extract price
   const priceText = md.match(/(?:Price|£)[:\s]*([^\n]+)/i);
   let price = parsePrice(priceText ? priceText[1] : md);
-  // Also check for "Free" anywhere prominent
   if (price === null && /\bfree\b/i.test(md.slice(0, 2000))) {
     price = 0;
   }
 
-  // Extract age from structured fields first, then description
+  // Extract age
   const ageField = md.match(/(?:Age|Age:)\s*([^\n]+)/i);
   let age_months = parseAge(ageField ? ageField[1] : null);
   if (age_months === null) age_months = parseAge(md);
@@ -82,16 +149,11 @@ async function scrapeListingPage(url) {
   const sexField = md.match(/(?:Gender|Sex)[:\s]+([^\n]+)/i);
   const sex = parseSex(sexField ? sexField[1] : md);
 
-  // Extract location — Gumtree includes region
-  let location_raw = null;
-  const locMatch = md.match(/(?:Location|Posted in|Area)[:\s]+([^\n]+)/i);
-  if (locMatch) {
-    location_raw = locMatch[1].trim();
-  }
+  // Extract location
+  const location_raw = extractLocation(md);
 
   // Extract description
-  const lines = md.split('\n').filter(l => l.trim().length > 40 && !l.startsWith('#') && !l.startsWith('|'));
-  const description = lines.slice(0, 10).join(' ').trim() || md.slice(0, 1000);
+  const description = extractDescription(md);
 
   // Extract photo URLs
   const photoRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;

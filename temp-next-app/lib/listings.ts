@@ -35,6 +35,7 @@ export async function getUndecidedListings(): Promise<Listing[]> {
     .from("listings")
     .select("*")
     .is("decision", null)
+    .or("age_months.is.null,age_months.gte.12")
     .order("score_overall", { ascending: false });
 
   if (error) throw error;

@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-nunito);
+  --color-cream: #FDF6EE;
+  --color-card: #FFFBF5;
+  --color-ink: #2D1B12;
+  --color-bark: #9B7A6E;
+  --color-dust: #C4A89C;
+  --color-rose: #E85D75;
+  --color-tangerine: #F4A261;
+  --color-blush: #FDE8ED;
+  --color-fog: #EDE8E3;
 }

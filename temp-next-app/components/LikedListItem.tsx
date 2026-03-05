@@ -21,51 +21,67 @@ function formatSource(source: string): string {
   return source;
 }
 
+function sanitizeLocation(loc: string | null): string | null {
+  if (!loc || loc.trim() === "") return null;
+  if (loc.length > 60) return null;
+  const lower = loc.toLowerCase();
+  if (
+    lower.includes("pets4homes") ||
+    lower.includes("gumtree") ||
+    lower.includes("cookie") ||
+    lower.includes("sign in") ||
+    lower.includes("http")
+  )
+    return null;
+  return loc.trim();
+}
+
 export default function LikedListItem({ listing }: { listing: Listing }) {
   const photoUrl = listing.photo_urls?.[0];
+  const location = sanitizeLocation(listing.location_raw);
 
   return (
     <a
       href={listing.external_url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm active:bg-zinc-50"
+      className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-[0_4px_16px_rgba(100,40,20,0.08)] active:bg-fog"
     >
       {/* Thumbnail */}
       {photoUrl ? (
         <img
           src={photoUrl}
           alt={listing.title ?? "Cat"}
-          className="h-[72px] w-[72px] shrink-0 rounded-lg object-cover"
+          className="h-[72px] w-[72px] shrink-0 rounded-xl object-cover"
         />
       ) : (
-        <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-2xl">
+        <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl bg-fog text-2xl">
           🐱
         </div>
       )}
 
       {/* Info */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-zinc-800">
+        <p className="truncate text-sm font-semibold text-ink">
           {listing.title ?? "Unnamed cat"}
         </p>
-        <p className="text-xs text-zinc-500">
-          {formatAge(listing.age_months)} · {listing.location_raw ?? "Unknown location"}
+        <p className="text-xs text-bark">
+          {formatAge(listing.age_months)} · {location ?? "Location unknown"}
         </p>
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-dust">
           Listed on {formatSource(listing.source)}
         </p>
-        <p className="text-xs text-zinc-400">{timeAgo(listing.decided_at)}</p>
+        <p className="text-xs text-dust">{timeAgo(listing.decided_at)}</p>
       </div>
 
       {/* Score + chevron */}
       <div className="flex shrink-0 items-center gap-2">
         {listing.score_overall != null && (
-          <span className="text-sm font-semibold text-zinc-700">
+          <span className="text-sm font-semibold text-ink">
             {listing.score_overall.toFixed(1)} ⭐
           </span>
         )}
-        <span className="text-zinc-300">›</span>
+        <span className="text-dust">›</span>
       </div>
     </a>
   );
