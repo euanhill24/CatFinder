@@ -2,7 +2,8 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', 
 
 const FirecrawlApp = require('@mendable/firecrawl-js').default;
 
-const app = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
+const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
+const app = firecrawl.v1;
 
 const BASE_URL = 'https://www.pets4homes.co.uk/sale/cats/ragdoll/';
 const MAX_PAGES = 2;

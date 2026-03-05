@@ -27,6 +27,9 @@ yarn-error.log*
 .env.local
 .env*.local
 
+# pipeline cache
+pipeline/scrape-cache.json
+
 # vercel
 .vercel
 

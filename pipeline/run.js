@@ -1,9 +1,14 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env.local') });
 
+const fs = require('fs');
+const path = require('path');
 const supabase = require('./supabase-server');
 const { enrichListing } = require('./enrich');
 const { scrapePets4Homes } = require('./scrapers/pets4homes');
 const { scrapeGumtree } = require('./scrapers/gumtree');
+
+const CACHE_PATH = path.join(__dirname, 'scrape-cache.json');
+const useCache = process.argv.includes('--use-cache');
 
 function log(msg) {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -16,31 +21,41 @@ async function run() {
   let allListings = [];
   let scrapersSucceeded = 0;
 
-  // Run Pets4Homes scraper
-  try {
-    log('Scraping Pets4Homes...');
-    const p4h = await scrapePets4Homes();
-    log(`Pets4Homes: ${p4h.length} listings fetched`);
-    allListings.push(...p4h);
-    scrapersSucceeded++;
-  } catch (err) {
-    log(`ERROR: Pets4Homes scraper failed: ${err.message}`);
-  }
+  if (useCache && fs.existsSync(CACHE_PATH)) {
+    allListings = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'));
+    log(`Loaded ${allListings.length} listings from scrape cache`);
+    scrapersSucceeded = 1;
+  } else {
+    // Run Pets4Homes scraper
+    try {
+      log('Scraping Pets4Homes...');
+      const p4h = await scrapePets4Homes();
+      log(`Pets4Homes: ${p4h.length} listings fetched`);
+      allListings.push(...p4h);
+      scrapersSucceeded++;
+    } catch (err) {
+      log(`ERROR: Pets4Homes scraper failed: ${err.message}`);
+    }
 
-  // Run Gumtree scraper
-  try {
-    log('Scraping Gumtree...');
-    const gt = await scrapeGumtree();
-    log(`Gumtree: ${gt.length} listings fetched`);
-    allListings.push(...gt);
-    scrapersSucceeded++;
-  } catch (err) {
-    log(`ERROR: Gumtree scraper failed: ${err.message}`);
-  }
+    // Run Gumtree scraper
+    try {
+      log('Scraping Gumtree...');
+      const gt = await scrapeGumtree();
+      log(`Gumtree: ${gt.length} listings fetched`);
+      allListings.push(...gt);
+      scrapersSucceeded++;
+    } catch (err) {
+      log(`ERROR: Gumtree scraper failed: ${err.message}`);
+    }
 
-  if (scrapersSucceeded === 0) {
-    log('FATAL: Both scrapers failed. Exiting.');
-    process.exit(1);
+    if (scrapersSucceeded === 0) {
+      log('FATAL: Both scrapers failed. Exiting.');
+      process.exit(1);
+    }
+
+    // Cache scraped listings for retry without re-scraping
+    fs.writeFileSync(CACHE_PATH, JSON.stringify(allListings, null, 2));
+    log(`Cached ${allListings.length} listings to ${CACHE_PATH}`);
   }
 
   // Deduplicate against existing listings in Supabase
