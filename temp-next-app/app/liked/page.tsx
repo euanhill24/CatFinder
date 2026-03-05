@@ -18,33 +18,33 @@ export default function LikedPage() {
   }, []);
 
   return (
-    <main className="min-h-dvh bg-zinc-50">
+    <main className="min-h-dvh bg-[#FFF8F5]">
       {/* Header */}
       <header className="flex items-center gap-3 px-4 pt-4 pb-2">
         <Link
           href="/"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-lg shadow-sm"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-card text-lg shadow-sm text-bark"
         >
           ‹
         </Link>
-        <h1 className="text-xl font-bold text-zinc-800">Saved Cats</h1>
+        <h1 className="font-display font-bold text-xl text-ink">Saved Cats</h1>
       </header>
 
       <div className="px-4 pb-8 pt-2">
         {loading ? (
-          <p className="py-12 text-center text-zinc-400">Loading...</p>
+          <p className="py-12 text-center text-bark">Loading...</p>
         ) : listings.length === 0 ? (
           <div className="flex flex-col items-center py-20 text-center">
-            <p className="text-5xl">🐾</p>
-            <p className="mt-4 text-lg font-medium text-zinc-600">
+            <p className="text-[80px] leading-none">🐾</p>
+            <p className="mt-4 font-display font-semibold text-xl text-ink">
               No cats saved yet
             </p>
-            <p className="mt-1 text-sm text-zinc-400">
+            <p className="mt-2 text-sm text-bark">
               Start swiping to save your favourites!
             </p>
             <Link
               href="/"
-              className="mt-6 rounded-full bg-pink-500 px-6 py-2.5 text-sm font-medium text-white active:scale-95"
+              className="mt-6 rounded-full bg-rose px-6 py-2.5 text-sm font-bold text-white active:scale-95"
             >
               Start swiping
             </Link>

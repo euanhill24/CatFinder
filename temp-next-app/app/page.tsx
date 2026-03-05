@@ -7,16 +7,25 @@ import { getUndecidedListings, Listing } from "@/lib/listings";
 import { likeCat, dismissCat } from "@/lib/decisions";
 import CatCard from "@/components/CatCard";
 import DetailModal from "@/components/DetailModal";
+import LikedDrawer from "@/components/LikedDrawer";
 
 type API = { swipe(dir?: string): Promise<void>; restoreCard(): Promise<void> };
+
+const emptySubtexts = [
+  "New cats drop every 4 hours. Go touch grass.",
+  "Nothing new yet. Maybe pet a real cat?",
+  "Check back soon. The internet has more cats, promise.",
+];
 
 export default function Home() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [likedCount, setLikedCount] = useState(0);
   const [detailListing, setDetailListing] = useState<Listing | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const cardRefs = useRef<(API | null)[]>([]);
   const swiping = useRef(false);
+  const [emptyText] = useState(() => emptySubtexts[Math.floor(Math.random() * emptySubtexts.length)]);
 
   useEffect(() => {
     getUndecidedListings()
@@ -98,46 +107,46 @@ export default function Home() {
 
   if (loading) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-zinc-50">
-        <p className="text-lg text-zinc-400">Loading cats...</p>
+      <main className="flex h-dvh items-center justify-center bg-cream">
+        <p className="text-lg text-bark">Loading cats...</p>
       </main>
     );
   }
 
   return (
-    <main className="flex min-h-dvh flex-col items-center bg-zinc-50">
+    <main className="flex h-dvh flex-col items-center bg-cream overflow-hidden">
       {/* Header */}
-      <header className="flex w-full max-w-md items-center justify-between px-4 pt-4">
-        <h1 className="text-xl font-bold text-zinc-800">Kitty Tinder</h1>
+      <header className="flex w-full max-w-md items-center justify-between px-4 pt-4 shrink-0">
+        <h1 className="font-display font-bold text-xl text-ink">🐾 Kitty Tinder</h1>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm text-bark">
             {listings.length > 0
               ? `${listings.length} cat${listings.length === 1 ? "" : "s"} to review`
               : ""}
           </span>
-          <Link
-            href="/liked"
-            className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white text-lg shadow-sm"
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="relative flex h-9 w-9 items-center justify-center rounded-full bg-card text-lg shadow-sm"
           >
             ♥
             {likedCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white">
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose text-[10px] font-bold text-white">
                 {likedCount}
               </span>
             )}
-          </Link>
+          </button>
         </div>
       </header>
 
       {/* Card area */}
-      <div className="relative mt-4 h-[72dvh] w-full max-w-md px-4">
+      <div className="relative mt-4 flex-1 min-h-0 w-full max-w-md px-4">
         {listings.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <p className="text-5xl">🐾</p>
-            <p className="mt-4 text-lg font-medium text-zinc-600">
+            <p className="text-[80px] leading-none">🐾</p>
+            <p className="mt-4 font-display font-semibold text-xl text-ink">
               You&apos;re all caught up!
             </p>
-            <p className="mt-1 text-sm text-zinc-400">Check back later</p>
+            <p className="mt-2 text-sm text-bark max-w-[260px]">{emptyText}</p>
           </div>
         ) : (
           listings.map((listing, index) => (
@@ -164,21 +173,24 @@ export default function Home() {
 
       {/* Buttons */}
       {listings.length > 0 && (
-        <div className="flex gap-8 pb-6 pt-4">
+        <div className="flex gap-10 pb-6 pt-4 shrink-0">
           <button
             onClick={() => triggerSwipe("left")}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-2xl shadow-md active:scale-95"
+            className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white text-2xl text-[#8C8C8C] shadow-[0_4px_16px_rgba(0,0,0,0.08)] transition-transform duration-[80ms] active:scale-[0.92]"
           >
             ✕
           </button>
           <button
             onClick={() => triggerSwipe("right")}
-            className="flex h-16 w-16 items-center justify-center rounded-full bg-pink-500 text-2xl text-white shadow-md active:scale-95"
+            className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-rose text-2xl text-white shadow-[0_4px_20px_rgba(232,93,117,0.40)] transition-transform duration-[80ms] active:scale-[0.92]"
           >
             ♥
           </button>
         </div>
       )}
+
+      {/* Liked drawer */}
+      <LikedDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
       {/* Detail modal */}
       {detailListing && (

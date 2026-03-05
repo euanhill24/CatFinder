@@ -1,3 +1,6 @@
+"use client";
+
+import { useRef } from "react";
 import { Listing } from "@/lib/listings";
 import ScoreBar from "./ScoreBar";
 
@@ -25,6 +28,22 @@ function formatSource(source: string): string {
   return source;
 }
 
+function sanitizeLocation(loc: string | null): string | null {
+  if (!loc || loc.trim() === "") return null;
+  if (loc.length > 60) return null;
+  const lower = loc.toLowerCase();
+  if (
+    lower.includes("pets4homes") ||
+    lower.includes("gumtree") ||
+    lower.includes("cookie") ||
+    lower.includes("sign in") ||
+    lower.includes("sign up") ||
+    lower.includes("http")
+  )
+    return null;
+  return loc.trim();
+}
+
 export default function CatCard({
   listing,
   onTap,
@@ -33,27 +52,52 @@ export default function CatCard({
   onTap?: () => void;
 }) {
   const photoUrl = listing.photo_urls?.[0];
+  const pointerStart = useRef<{ x: number; y: number; t: number } | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    pointerStart.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!pointerStart.current) return;
+    const dx = e.clientX - pointerStart.current.x;
+    const dy = e.clientY - pointerStart.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const duration = Date.now() - pointerStart.current.t;
+    pointerStart.current = null;
+    if (dist < 10 && duration < 300) {
+      onTap?.();
+    }
+  };
+
+  const location = sanitizeLocation(listing.location_raw);
 
   return (
     <div
-      className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-white shadow-lg"
+      className="flex h-full w-full flex-col overflow-hidden rounded-[28px] bg-card shadow-[0_8px_32px_rgba(100,40,20,0.10),0_2px_8px_rgba(100,40,20,0.06)]"
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
       onClick={(e) => {
         e.stopPropagation();
-        onTap?.();
       }}
     >
       {/* Photo */}
-      <div className="relative w-full" style={{ height: "55%" }}>
+      <div className="relative w-full bg-fog" style={{ height: "55%" }}>
         {photoUrl ? (
           <img
             src={photoUrl}
             alt={listing.title ?? "Cat photo"}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
             draggable={false}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-zinc-100 text-6xl">
+          <div className="flex h-full w-full items-center justify-center text-6xl">
             🐱
+          </div>
+        )}
+        {listing.score_overall != null && (
+          <div className="absolute top-3 right-3 rounded-full bg-card/80 backdrop-blur-sm px-2.5 py-1 font-display font-semibold text-ink text-sm">
+            {listing.score_overall.toFixed(1)}/10
           </div>
         )}
       </div>
@@ -61,18 +105,18 @@ export default function CatCard({
       {/* Info */}
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div>
-          <h2 className="text-lg font-semibold leading-tight text-zinc-900">
+          <h2 className="font-display font-semibold text-[22px] leading-tight text-ink">
             {listing.title ?? "Unnamed cat"}
           </h2>
-          <p className="mt-0.5 text-sm text-zinc-500">
+          <p className="mt-0.5 text-sm text-bark">
             {formatAge(listing.age_months)}
             {listing.sex && listing.sex !== "unknown"
               ? ` · ${listing.sex.charAt(0).toUpperCase() + listing.sex.slice(1)}`
               : ""}
           </p>
-          {listing.location_raw && (
-            <p className="text-sm text-zinc-500">
-              📍 {listing.location_raw}
+          {location && (
+            <p className="text-sm text-bark">
+              📍 {location}
             </p>
           )}
         </div>
@@ -94,7 +138,7 @@ export default function CatCard({
         </div>
 
         {/* Footer */}
-        <p className="mt-1 text-xs text-zinc-400">
+        <p className="mt-1 text-xs text-dust">
           {formatSource(listing.source)}
           {listing.listed_at
             ? ` · Listed ${timeAgo(listing.listed_at)}`
