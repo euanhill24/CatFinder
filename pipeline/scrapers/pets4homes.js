@@ -6,7 +6,7 @@ const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
 const app = firecrawl.v1;
 
 const BASE_URL = 'https://www.pets4homes.co.uk/sale/cats/ragdoll/';
-const MAX_PAGES = 2;
+const MAX_PAGES = 5;
 const DELAY_MS = 500;
 
 const BOILERPLATE = [
@@ -36,14 +36,19 @@ function parsePrice(text) {
 
 function parseAge(text) {
   if (!text) return null;
-  const weeksMatch = text.match(/(\d+)\s*weeks?/i);
-  if (weeksMatch) return Math.max(1, Math.round(parseInt(weeksMatch[1]) / 4.33));
+
+  // Handle compound: "1 year, 4 months" or "2 years 3 months"
+  const compoundMatch = text.match(/(\d+)\s*years?\s*,?\s*(\d+)\s*months?/i);
+  if (compoundMatch) return parseInt(compoundMatch[1]) * 12 + parseInt(compoundMatch[2]);
+
+  const yearsMatch = text.match(/(\d+)\s*years?/i);
+  if (yearsMatch) return parseInt(yearsMatch[1]) * 12;
 
   const monthsMatch = text.match(/(\d+)\s*months?/i);
   if (monthsMatch) return parseInt(monthsMatch[1]);
 
-  const yearsMatch = text.match(/(\d+)\s*years?/i);
-  if (yearsMatch) return parseInt(yearsMatch[1]) * 12;
+  const weeksMatch = text.match(/(\d+)\s*weeks?/i);
+  if (weeksMatch) return Math.max(1, Math.round(parseInt(weeksMatch[1]) / 4.33));
 
   return null;
 }
@@ -152,8 +157,10 @@ async function scrapeListingPage(url) {
   // Extract price
   const price = parsePrice(md);
 
-  // Extract age
-  const age_months = parseAge(md);
+  // Extract age from structured field (e.g. "Age1 year, 4 months" or "1 yearAge")
+  const ageFieldMatch = md.match(/Age\s*(\d+\s*years?\s*(?:,?\s*\d+\s*months?)?|\d+\s*months?|\d+\s*weeks?)/i)
+    || md.match(/(\d+\s*years?\s*(?:,?\s*\d+\s*months?)?|\d+\s*months?|\d+\s*weeks?)\s*Age/i);
+  const age_months = ageFieldMatch ? parseAge(ageFieldMatch[1]) : null;
 
   // Extract sex
   const sex = parseSex(md);
