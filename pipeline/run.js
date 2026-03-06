@@ -69,10 +69,20 @@ async function run() {
   }
 
   const existingUrls = new Set((existing || []).map(r => r.external_url));
-  const newListings = allListings.filter(l => !existingUrls.has(l.external_url));
-  const duplicateCount = allListings.length - newListings.length;
+  const dedupedListings = allListings.filter(l => !existingUrls.has(l.external_url));
+  const duplicateCount = allListings.length - dedupedListings.length;
 
-  log(`${allListings.length} listings to process (${newListings.length} new, ${duplicateCount} duplicates)`);
+  // Filter out kittens under 12 months — older cats only
+  const newListings = dedupedListings.filter(l => {
+    if (l.age_months != null && l.age_months < 12) {
+      log(`Skipping (under 12 months): ${l.title || l.external_url}`);
+      return false;
+    }
+    return true;
+  });
+  const ageFilteredCount = dedupedListings.length - newListings.length;
+
+  log(`${allListings.length} listings to process (${newListings.length} new, ${duplicateCount} duplicates, ${ageFilteredCount} filtered by age)`);
 
   let inserted = 0;
   let errors = 0;
