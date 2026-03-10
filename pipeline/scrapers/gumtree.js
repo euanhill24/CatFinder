@@ -1,27 +1,8 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '.env.local') });
+const { fetchPage } = require('./fetch-page');
 
-const FirecrawlApp = require('@mendable/firecrawl-js').default;
-
-const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
-const app = firecrawl.v1;
-
-const BASE_URL = 'https://www.gumtree.com/cats-kittens-for-sale/uk/ragdoll';
+const BASE_URL = 'https://www.gumtree.com/search?search_category=cats&q=ragdoll';
 const MAX_PAGES = 5;
-const DELAY_MS = 500;
-
-const BOILERPLATE = [
-  'gumtree',
-  'cookie',
-  'sign in',
-  'sign up',
-  'privacy policy',
-  'terms of use',
-  'accept all',
-  'we use cookies',
-  'report this ad',
-  'safety tips',
-  'posting an ad',
-];
+const DELAY_MS = 1500;
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -63,113 +44,70 @@ function parseSex(text) {
   return 'unknown';
 }
 
-function containsBoilerplate(text) {
-  const lower = text.toLowerCase();
-  return BOILERPLATE.some(b => lower.includes(b));
-}
-
-function extractDescription(md) {
-  // Strategy 1: Find section-based description
-  const sectionMatch = md.match(/(?:^|\n)#+\s*(?:Description|About this item|About|Details|Seller's description)[^\n]*\n([\s\S]*?)(?=\n#+\s|\n---|\n\||\Z)/i);
-  if (sectionMatch) {
-    const text = sectionMatch[1].trim();
-    const cleaned = text.split('\n')
-      .filter(l => !containsBoilerplate(l) && !l.startsWith('!') && !l.match(/^\[/))
-      .join('\n')
-      .trim();
-    if (cleaned.length >= 50) return cleaned;
-  }
-
-  // Strategy 2: Find longest contiguous plain text block
-  const lines = md.split('\n');
-  let bestBlock = '';
-  let currentBlock = '';
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('|') || trimmed.startsWith('[') || trimmed.startsWith('!') || trimmed.match(/^[-*]\s/) || containsBoilerplate(trimmed)) {
-      if (currentBlock.length > bestBlock.length) bestBlock = currentBlock;
-      currentBlock = '';
-      continue;
-    }
-    currentBlock += (currentBlock ? '\n' : '') + trimmed;
-  }
-  if (currentBlock.length > bestBlock.length) bestBlock = currentBlock;
-
-  if (bestBlock.length >= 50) return bestBlock;
-
-  return null;
-}
-
-function extractLocation(md) {
-  const locMatch = md.match(/(?:Location|Posted in|Area)[:\s]+([^\n]+)/i);
-  if (locMatch) {
-    const loc = locMatch[1].trim();
-    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
-  }
-
-  const tableMatch = md.match(/\|\s*Location\s*\|\s*([^|]+)\|/i);
-  if (tableMatch) {
-    const loc = tableMatch[1].trim();
-    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
-  }
-
-  return null;
-}
-
-function extractListingUrls(markdown) {
+function extractListingUrls($) {
   const urls = [];
-  const regex = /https:\/\/www\.gumtree\.com\/p\/[^\s)\]"]+/g;
-  let match;
-  while ((match = regex.exec(markdown)) !== null) {
-    const url = match[0].replace(/[.,;]+$/, '');
-    if (!urls.includes(url)) urls.push(url);
-  }
+  $('a[href*="/p/cats/"]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (href) {
+      const fullUrl = href.startsWith('http')
+        ? href
+        : `https://www.gumtree.com${href}`;
+      if (!urls.includes(fullUrl)) urls.push(fullUrl);
+    }
+  });
   return urls;
 }
 
 async function scrapeListingPage(url) {
-  const result = await app.scrapeUrl(url, { formats: ['markdown'] });
-  if (!result.success) throw new Error(`Failed to scrape ${url}`);
+  const $ = await fetchPage(url);
 
-  const md = result.markdown || '';
+  // Title
+  const title = $('h1').first().text().trim() || null;
 
-  // Extract title
-  const titleMatch = md.match(/^#\s+(.+)/m);
-  const title = titleMatch ? titleMatch[1].trim() : null;
+  // Price
+  const priceText = $('[data-q="ad-price"]').first().text();
+  const price = parsePrice(priceText);
 
-  // Extract price
-  const priceText = md.match(/(?:Price|£)[:\s]*([^\n]+)/i);
-  let price = parsePrice(priceText ? priceText[1] : md);
-  if (price === null && /\bfree\b/i.test(md.slice(0, 2000))) {
-    price = 0;
+  // Location — reliable data-q selector
+  const location_raw = $('[data-q="ad-location"]').first().text().trim() || null;
+
+  // Age — from data-q attribute or from attributes text
+  let ageText = $('[data-q="Age-value"]').first().text().trim();
+  if (!ageText) {
+    // Fallback: look in the attributes section
+    $('[class*="pets-attributes"]').each((_, el) => {
+      const text = $(el).text().trim();
+      const ageMatch = text.match(/Age:\s*(.+)/i);
+      if (ageMatch && !ageText) ageText = ageMatch[1];
+    });
   }
+  const age_months = parseAge(ageText || null);
 
-  // Extract age from structured field only — avoid parsing full markdown
-  const ageField = md.match(/(?:Age|Age:)\s*([^\n]+)/i);
-  const age_months = ageField ? parseAge(ageField[1]) : null;
+  // Sex — from attributes section
+  let sexText = '';
+  $('[class*="pets-attributes"]').each((_, el) => {
+    const text = $(el).text().trim();
+    const sexMatch = text.match(/Sex:\s*(.+)/i);
+    if (sexMatch && !sexText) sexText = sexMatch[1];
+  });
+  const sex = parseSex(sexText || title || '');
 
-  // Extract sex
-  const sexField = md.match(/(?:Gender|Sex)[:\s]+([^\n]+)/i);
-  const sex = parseSex(sexField ? sexField[1] : md);
+  // Description
+  const descEl = $('[itemprop="description"]');
+  let description = descEl.length ? descEl.text().trim() : null;
+  if (description && description.length < 50) description = null;
 
-  // Extract location
-  const location_raw = extractLocation(md);
-
-  // Extract description
-  const description = extractDescription(md);
-
-  // Extract photo URLs
-  const photoRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
+  // Photos — from carousel images and OG image
   const photo_urls = [];
-  let photoMatch;
-  while ((photoMatch = photoRegex.exec(md)) !== null) {
-    if (!photo_urls.includes(photoMatch[1])) photo_urls.push(photoMatch[1]);
-  }
-  if (result.metadata && result.metadata.ogImage) {
-    const ogImg = result.metadata.ogImage;
-    if (!photo_urls.includes(ogImg)) photo_urls.unshift(ogImg);
-  }
+  const ogImage = $('meta[property="og:image"]').attr('content');
+  if (ogImage) photo_urls.push(ogImage);
+
+  $('img').each((_, el) => {
+    const src = $(el).attr('src') || '';
+    if (src.includes('img.gumtree.com') && !photo_urls.includes(src)) {
+      photo_urls.push(src);
+    }
+  });
 
   return {
     external_url: url,
@@ -193,16 +131,12 @@ async function scrapeGumtree() {
   const allListingUrls = [];
 
   for (let page = 1; page <= MAX_PAGES; page++) {
-    const url = page === 1 ? BASE_URL : `${BASE_URL}/page${page}`;
+    const url = page === 1 ? BASE_URL : `${BASE_URL}&page=${page}`;
     console.log(`  Scraping search page ${page}: ${url}`);
 
     try {
-      const result = await app.scrapeUrl(url, { formats: ['markdown'] });
-      if (!result.success) {
-        console.warn(`  Warning: Failed to scrape search page ${page}`);
-        continue;
-      }
-      const urls = extractListingUrls(result.markdown || '');
+      const $ = await fetchPage(url);
+      const urls = extractListingUrls($);
       console.log(`  Found ${urls.length} listing URLs on page ${page}`);
       allListingUrls.push(...urls);
     } catch (err) {
