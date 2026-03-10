@@ -20,8 +20,8 @@
   "homepage": "https://github.com/euanhill24/CatFinder#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@mendable/firecrawl-js": "^4.15.2",
     "@supabase/supabase-js": "^2.98.0",
+    "cheerio": "^1.2.0",
     "dotenv": "^17.3.1"
   }
 }

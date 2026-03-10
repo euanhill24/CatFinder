@@ -1,27 +1,8 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '.env.local') });
-
-const FirecrawlApp = require('@mendable/firecrawl-js').default;
-
-const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
-const app = firecrawl.v1;
+const { fetchPage } = require('./fetch-page');
 
 const BASE_URL = 'https://www.pets4homes.co.uk/sale/cats/ragdoll/';
 const MAX_PAGES = 5;
 const DELAY_MS = 500;
-
-const BOILERPLATE = [
-  'other than their own home',
-  'scrupulous setters',
-  'pets4homes',
-  'cookie',
-  'sign in',
-  'sign up',
-  'privacy policy',
-  'terms of use',
-  'accept all',
-  'we use cookies',
-  'report this advert',
-];
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -61,127 +42,86 @@ function parseSex(text) {
   return 'unknown';
 }
 
-function containsBoilerplate(text) {
-  const lower = text.toLowerCase();
-  return BOILERPLATE.some(b => lower.includes(b));
-}
-
-function extractDescription(md) {
-  // Strategy 1: Find section-based description
-  const sectionMatch = md.match(/(?:^|\n)#+\s*(?:Description|About this pet|About me|About)[^\n]*\n([\s\S]*?)(?=\n#+\s|\n---|\n\||\Z)/i);
-  if (sectionMatch) {
-    const text = sectionMatch[1].trim();
-    const cleaned = text.split('\n')
-      .filter(l => !containsBoilerplate(l) && !l.startsWith('!') && !l.match(/^\[/))
-      .join('\n')
-      .trim();
-    if (cleaned.length >= 50) return cleaned;
-  }
-
-  // Strategy 2: Find longest contiguous plain text block
-  const lines = md.split('\n');
-  let bestBlock = '';
-  let currentBlock = '';
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    // Skip non-prose lines
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('|') || trimmed.startsWith('[') || trimmed.startsWith('!') || trimmed.match(/^[-*]\s/) || containsBoilerplate(trimmed)) {
-      if (currentBlock.length > bestBlock.length) bestBlock = currentBlock;
-      currentBlock = '';
-      continue;
-    }
-    currentBlock += (currentBlock ? '\n' : '') + trimmed;
-  }
-  if (currentBlock.length > bestBlock.length) bestBlock = currentBlock;
-
-  if (bestBlock.length >= 50) return bestBlock;
-
-  // Fallback: null if nothing good
-  return null;
-}
-
-function extractLocation(md, url) {
-  // Try structured fields
-  const locMatch = md.match(/(?:Location|Based in|Located in)[:\s]+([^\n]+)/i);
-  if (locMatch) {
-    const loc = locMatch[1].trim();
-    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
-  }
-
-  const areaMatch = md.match(/(?:Area|City|Town)[:\s]+([^\n]+)/i);
-  if (areaMatch) {
-    const loc = areaMatch[1].trim();
-    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
-  }
-
-  // Try table patterns: | Location | Edinburgh |
-  const tableMatch = md.match(/\|\s*Location\s*\|\s*([^|]+)\|/i);
-  if (tableMatch) {
-    const loc = tableMatch[1].trim();
-    if (loc.length <= 60 && !containsBoilerplate(loc)) return loc;
-  }
-
-  // Fallback: parse from URL slug
-  if (url) {
-    const slugMatch = url.match(/\/classifieds\/[^/]+-in-([^/]+)/i);
-    if (slugMatch) {
-      return slugMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    }
-  }
-
-  return null;
-}
-
-function extractListingUrls(markdown) {
+function extractListingUrls($) {
   const urls = [];
-  const regex = /https:\/\/www\.pets4homes\.co\.uk\/classifieds\/[^\s)\]"]+/g;
-  let match;
-  while ((match = regex.exec(markdown)) !== null) {
-    const url = match[0].replace(/[.,;]+$/, '');
-    if (!urls.includes(url)) urls.push(url);
-  }
+  $('a[href*="/classifieds/"]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (href) {
+      const fullUrl = href.startsWith('http')
+        ? href
+        : `https://www.pets4homes.co.uk${href}`;
+      if (!urls.includes(fullUrl)) urls.push(fullUrl);
+    }
+  });
   return urls;
 }
 
 async function scrapeListingPage(url) {
-  const result = await app.scrapeUrl(url, { formats: ['markdown'] });
-  if (!result.success) throw new Error(`Failed to scrape ${url}`);
+  const $ = await fetchPage(url);
 
-  const md = result.markdown || '';
+  // Title
+  const title = $('h1').first().text().trim() || null;
 
-  // Extract title — usually the first heading
-  const titleMatch = md.match(/^#\s+(.+)/m);
-  const title = titleMatch ? titleMatch[1].trim() : null;
+  // Price — data-testid selector, fallback to any text with £
+  const priceText =
+    $('[data-testid="advert-listing-price"]').first().text() ||
+    $('[data-testid="pet-price"]').first().text();
+  const price = parsePrice(priceText);
 
-  // Extract price
-  const price = parsePrice(md);
+  // Location — reliable data-testid selector
+  const location_raw =
+    $('[data-testid="listing-location"]').first().text().trim() ||
+    $('[data-testid="location-button"]').first().text().trim() ||
+    extractLocationFromUrl(url);
 
-  // Extract age from structured field (e.g. "Age1 year, 4 months" or "1 yearAge")
-  const ageFieldMatch = md.match(/Age\s*(\d+\s*years?\s*(?:,?\s*\d+\s*months?)?|\d+\s*months?|\d+\s*weeks?)/i)
-    || md.match(/(\d+\s*years?\s*(?:,?\s*\d+\s*months?)?|\d+\s*months?|\d+\s*weeks?)\s*Age/i);
-  const age_months = ageFieldMatch ? parseAge(ageFieldMatch[1]) : null;
+  // Extract structured attributes (Age, Sex, etc.)
+  const attrs = {};
+  $('[data-testid="attribute-name"]').each((i, el) => {
+    const name = $(el).text().trim();
+    const value = $('[data-testid="attribute-value"]').eq(i).text().trim();
+    attrs[name] = value;
+  });
 
-  // Extract sex
-  const sex = parseSex(md);
+  // Age
+  const age_months = parseAge(attrs['Age'] || null);
 
-  // Extract location
-  const location_raw = extractLocation(md, url);
+  // Sex — from "Pets in litter" field (e.g. "1 male / 3 female") or general attributes
+  const sex = parseSex(attrs['Pets in litter'] || attrs['Gender'] || attrs['Sex'] || '');
 
-  // Extract description
-  const description = extractDescription(md);
+  // Description — from JSON-LD (most reliable) or data-testid
+  let description = null;
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const j = JSON.parse($(el).html());
+      if (j['@type'] === 'Product' && j.description) {
+        description = j.description;
+      }
+    } catch (e) {}
+  });
+  if (!description) {
+    const descEl = $('[data-testid="listing-description"]');
+    if (descEl.length) {
+      // Remove the "Description" heading text
+      description = descEl.text().trim().replace(/^Description\s*/i, '');
+    }
+  }
+  if (description && description.length < 50) description = null;
 
-  // Extract photo URLs
-  const photoRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/g;
+  // Photos — from JSON-LD image array (best), then OG image, then page images
   const photo_urls = [];
-  let photoMatch;
-  while ((photoMatch = photoRegex.exec(md)) !== null) {
-    if (!photo_urls.includes(photoMatch[1])) photo_urls.push(photoMatch[1]);
-  }
-  if (result.metadata && result.metadata.ogImage) {
-    const ogImg = result.metadata.ogImage;
-    if (!photo_urls.includes(ogImg)) photo_urls.unshift(ogImg);
-  }
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const j = JSON.parse($(el).html());
+      if (j['@type'] === 'Product' && j.image) {
+        const images = Array.isArray(j.image) ? j.image : [j.image];
+        images.forEach(img => {
+          if (typeof img === 'string' && !photo_urls.includes(img)) photo_urls.push(img);
+        });
+      }
+    } catch (e) {}
+  });
+  const ogImage = $('meta[property="og:image"]').attr('content');
+  if (ogImage && !photo_urls.includes(ogImage)) photo_urls.unshift(ogImage);
 
   return {
     external_url: url,
@@ -189,12 +129,26 @@ async function scrapeListingPage(url) {
     price,
     age_months,
     sex,
-    location_raw,
+    location_raw: location_raw || null,
     description,
     photo_urls,
     listed_at: null,
     source: 'pets4homes',
   };
+}
+
+function extractLocationFromUrl(url) {
+  const slugMatch = url.match(/\/classifieds\/[^/]+-in-([^/]+)/i);
+  if (slugMatch) {
+    return slugMatch[1]
+      .replace(/-/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+  }
+  // Try the last segment before trailing slash
+  const parts = url.replace(/\/$/, '').split('-');
+  // URL format: /classifieds/ID-title-words-LOCATION/
+  // Location is typically the last hyphenated word(s) after the title
+  return null;
 }
 
 /**
@@ -209,12 +163,8 @@ async function scrapePets4Homes() {
     console.log(`  Scraping search page ${page}: ${url}`);
 
     try {
-      const result = await app.scrapeUrl(url, { formats: ['markdown'] });
-      if (!result.success) {
-        console.warn(`  Warning: Failed to scrape search page ${page}`);
-        continue;
-      }
-      const urls = extractListingUrls(result.markdown || '');
+      const $ = await fetchPage(url);
+      const urls = extractListingUrls($);
       console.log(`  Found ${urls.length} listing URLs on page ${page}`);
       allListingUrls.push(...urls);
     } catch (err) {
