@@ -30,7 +30,7 @@ export default function Home() {
   useEffect(() => {
     getUndecidedListings()
       .then((data) => {
-        setListings(data);
+        setListings([...data].reverse());
         cardRefs.current = data.map(() => null);
       })
       .catch(console.error)
