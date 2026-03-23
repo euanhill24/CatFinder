@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import TinderCard from "react-tinder-card";
-import Link from "next/link";
 import { getUndecidedListings, Listing } from "@/lib/listings";
 import { likeCat, dismissCat } from "@/lib/decisions";
 import CatCard from "@/components/CatCard";
@@ -30,7 +29,7 @@ export default function Home() {
   useEffect(() => {
     getUndecidedListings()
       .then((data) => {
-        setListings(data);
+        setListings([...data].reverse());
         cardRefs.current = data.map(() => null);
       })
       .catch(console.error)
@@ -49,21 +48,19 @@ export default function Home() {
   }, []);
 
   const handleSwipe = useCallback(
-    async (direction: string, index: number) => {
-      const listing = listings[index];
-      if (!listing) return;
+    async (direction: string, id: string) => {
       try {
         if (direction === "right") {
-          await likeCat(listing.id);
+          await likeCat(id);
           setLikedCount((c) => c + 1);
         } else if (direction === "left") {
-          await dismissCat(listing.id);
+          await dismissCat(id);
         }
       } catch (err) {
         console.error("Decision failed:", err);
       }
     },
-    [listings]
+    []
   );
 
   const handleCardLeftScreen = useCallback(
@@ -78,6 +75,8 @@ export default function Home() {
     async (dir: "left" | "right") => {
       if (currentIndex < 0 || swiping.current) return;
       swiping.current = true;
+      // Fallback: reset the guard if onCardLeftScreen never fires
+      setTimeout(() => { swiping.current = false; }, 1000);
       await cardRefs.current[currentIndex]?.swipe(dir);
     },
     [currentIndex]
@@ -149,25 +148,55 @@ export default function Home() {
             <p className="mt-2 text-sm text-bark max-w-[260px]">{emptyText}</p>
           </div>
         ) : (
-          listings.map((listing, index) => (
-            <TinderCard
-              key={listing.id}
-              ref={(el: API | null) => {
-                cardRefs.current[index] = el;
-              }}
-              onSwipe={(dir: string) => handleSwipe(dir, index)}
-              onCardLeftScreen={(dir: string) =>
-                handleCardLeftScreen(dir, index)
-              }
-              preventSwipe={["up", "down"]}
-              className="absolute inset-0"
-            >
-              <CatCard
-                listing={listing}
-                onTap={() => setDetailListing(listing)}
-              />
-            </TinderCard>
-          ))
+          listings.map((listing, index) => {
+            if (index < currentIndex - 2) return null;
+
+            const isTop = index === currentIndex;
+            const isSecond = index === currentIndex - 1;
+
+            // Outer div owns z-index; TinderCard v1.6.4 doesn't type its style prop
+            return (
+              <div
+                key={listing.id}
+                className="absolute inset-0"
+                style={{ zIndex: index }}
+              >
+                <TinderCard
+                  ref={(el: API | null) => {
+                    cardRefs.current[index] = el;
+                  }}
+                  onSwipe={(dir: string) => handleSwipe(dir, listing.id)}
+                  onCardLeftScreen={(dir: string) =>
+                    handleCardLeftScreen(dir, index)
+                  }
+                  preventSwipe={["up", "down"]}
+                  swipeRequirementType="position"
+                  swipeThreshold={80}
+                  className="absolute inset-0"
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      transform: isTop
+                        ? "scale(1) translateY(0px)"
+                        : isSecond
+                        ? "scale(0.95) translateY(12px)"
+                        : "scale(0.90) translateY(24px)",
+                      opacity: isTop ? 1 : isSecond ? 0.85 : 0,
+                      transition: "transform 0.25s ease, opacity 0.25s ease",
+                      willChange: "transform, opacity",
+                      pointerEvents: isTop ? "auto" : "none",
+                    }}
+                  >
+                    <CatCard
+                      listing={listing}
+                      onTap={isTop ? () => setDetailListing(listing) : undefined}
+                    />
+                  </div>
+                </TinderCard>
+              </div>
+            );
+          })
         )}
       </div>
 
