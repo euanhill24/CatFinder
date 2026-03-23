@@ -156,40 +156,44 @@ export default function Home() {
             const isSecond = index === currentIndex - 1;
 
             return (
-              <TinderCard
+              <div
                 key={listing.id}
-                ref={(el: API | null) => {
-                  cardRefs.current[index] = el;
-                }}
-                onSwipe={(dir: string) => handleSwipe(dir, index)}
-                onCardLeftScreen={(dir: string) =>
-                  handleCardLeftScreen(dir, index)
-                }
-                preventSwipe={["up", "down"]}
-                swipeRequirementType="position"
-                swipeThreshold={80}
                 className="absolute inset-0"
                 style={{ zIndex: index }}
               >
-                <div
-                  style={{
-                    height: "100%",
-                    transform: isTop
-                      ? "scale(1) translateY(0px)"
-                      : isSecond
-                      ? "scale(0.95) translateY(12px)"
-                      : "scale(0.90) translateY(24px)",
-                    opacity: isTop ? 1 : isSecond ? 0.85 : 0,
-                    transition: "transform 0.25s ease, opacity 0.25s ease",
-                    pointerEvents: isTop ? "auto" : "none",
+                <TinderCard
+                  ref={(el: API | null) => {
+                    cardRefs.current[index] = el;
                   }}
+                  onSwipe={(dir: string) => handleSwipe(dir, index)}
+                  onCardLeftScreen={(dir: string) =>
+                    handleCardLeftScreen(dir, index)
+                  }
+                  preventSwipe={["up", "down"]}
+                  swipeRequirementType="position"
+                  swipeThreshold={80}
+                  className="absolute inset-0"
                 >
-                  <CatCard
-                    listing={listing}
-                    onTap={isTop ? () => setDetailListing(listing) : undefined}
-                  />
-                </div>
-              </TinderCard>
+                  <div
+                    style={{
+                      height: "100%",
+                      transform: isTop
+                        ? "scale(1) translateY(0px)"
+                        : isSecond
+                        ? "scale(0.95) translateY(12px)"
+                        : "scale(0.90) translateY(24px)",
+                      opacity: isTop ? 1 : isSecond ? 0.85 : 0,
+                      transition: "transform 0.25s ease, opacity 0.25s ease",
+                      pointerEvents: isTop ? "auto" : "none",
+                    }}
+                  >
+                    <CatCard
+                      listing={listing}
+                      onTap={isTop ? () => setDetailListing(listing) : undefined}
+                    />
+                  </div>
+                </TinderCard>
+              </div>
             );
           })
         )}
