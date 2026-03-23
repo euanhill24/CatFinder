@@ -87,7 +87,7 @@ export default function CatCard({
           <img
             src={photoUrl}
             alt={listing.title ?? "Cat photo"}
-            className="h-full w-full object-contain"
+            className="h-full w-full object-cover"
             draggable={false}
           />
         ) : (
