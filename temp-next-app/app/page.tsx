@@ -159,7 +159,7 @@ export default function Home() {
               <div
                 key={listing.id}
                 className="absolute inset-0"
-                style={{ zIndex: index }}
+                style={{ zIndex: isTop ? 3 : isSecond ? 2 : 1 }}
               >
                 <TinderCard
                   ref={(el: API | null) => {
