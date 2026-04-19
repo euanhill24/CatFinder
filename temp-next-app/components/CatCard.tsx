@@ -70,6 +70,26 @@ export default function CatCard({
     }
   };
 
+  // react-tinder-card calls preventDefault() on touchstart, which suppresses
+  // pointerup on mobile. These touch handlers ensure tapping works on touch devices.
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    pointerStart.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!pointerStart.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - pointerStart.current.x;
+    const dy = t.clientY - pointerStart.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const duration = Date.now() - pointerStart.current.t;
+    pointerStart.current = null;
+    if (dist < 10 && duration < 300) {
+      onTap?.();
+    }
+  };
+
   const location = sanitizeLocation(listing.location_raw);
 
   return (
@@ -77,6 +97,8 @@ export default function CatCard({
       className="flex h-full w-full flex-col overflow-hidden rounded-[28px] bg-card shadow-[0_8px_32px_rgba(100,40,20,0.10),0_2px_8px_rgba(100,40,20,0.06)]"
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       onClick={(e) => {
         e.stopPropagation();
       }}
