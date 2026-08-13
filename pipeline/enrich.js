@@ -1,8 +1,9 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env.local') });
-
 const Anthropic = require('@anthropic-ai/sdk');
+const { requireEnv } = require('./env');
 
-const client = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY });
+const { ANTHROPIC_API_KEY } = requireEnv(['ANTHROPIC_API_KEY']);
+
+const client = new Anthropic.default({ apiKey: ANTHROPIC_API_KEY });
 
 const SYSTEM_PROMPT = `You are evaluating a cat listing for a young doctor in Edinburgh who works long hospital shifts. She wants a ragdoll cat that will be happy home alone during the day. She lives alone, so a calm, affectionate cat that handles solitude well is ideal. Older cats are preferred over kittens.
 

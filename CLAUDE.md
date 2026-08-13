@@ -27,7 +27,7 @@ node pipeline/run.js   # Scrape → enrich → insert (requires .env.local)
 
 1. **Frontend** (Next.js 16 App Router + Tailwind v4 + TypeScript) — reads/updates `listings` via Supabase anon key. Two routes: `/` (swipe cards sorted by score) and `/liked` (right-swiped cats).
 
-2. **Pipeline** (Node.js scripts in `pipeline/`) — runs on GitHub Actions cron every 4h. Scrapers (Firecrawl) pull from Pets4Homes and Gumtree, Claude API scores each listing, results inserted via Supabase service role key.
+2. **Pipeline** (Node.js scripts in `pipeline/`) — runs on GitHub Actions cron every 4h. Scrapers (`fetch` + Cheerio) pull from Pets4Homes and Gumtree, Claude API scores each listing, results inserted via Supabase service role key. See "Pipeline Reliability" in `ARCHITECTURE.md` for the preflight/retry/caching behaviour.
 
 **Data flow:** Scrapers → `pipeline/enrich.js` (Claude API scoring) → Supabase `listings` table → Frontend reads undecided listings sorted by `score_overall` DESC → user swipes → `decision` column updated.
 
@@ -39,6 +39,6 @@ node pipeline/run.js   # Scrape → enrich → insert (requires .env.local)
 - **No auth/RLS:** Single-user personal tool. Anon key gives full read/write to `listings`.
 - **No AI branding:** Scores displayed as plain attributes, never labelled "AI summary" or similar.
 - **Path alias:** `@/*` maps to project root in TypeScript imports.
-- **Env vars:** Copy `.env.example` to `.env.local`. Frontend uses `NEXT_PUBLIC_*` vars only. Pipeline uses `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `FIRECRAWL_API_KEY`.
+- **Env vars:** Copy `.env.example` to `.env.local`. Frontend uses `NEXT_PUBLIC_*` vars only. Pipeline uses `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`.
 - **Database changes:** Run SQL directly in Supabase SQL Editor — no migration tooling.
 - **Deduplication:** `external_url` is the unique key for listings.

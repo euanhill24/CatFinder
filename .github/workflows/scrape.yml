@@ -5,9 +5,15 @@ on:
     - cron: '0 */4 * * *'
   workflow_dispatch:
 
+# A slow run must not overlap with the next scheduled one.
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -16,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -28,3 +34,14 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      # Keeps the scraped listings recoverable when a later stage fails, so a
+      # retry can run with --use-cache instead of re-scraping both sites.
+      - name: Upload scrape cache on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-cache
+          path: pipeline/scrape-cache.json
+          retention-days: 7
+          if-no-files-found: ignore

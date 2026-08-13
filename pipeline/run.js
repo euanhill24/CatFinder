@@ -1,22 +1,93 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env.local') });
-
 const fs = require('fs');
 const path = require('path');
-const supabase = require('./supabase-server');
-const { enrichListing } = require('./enrich');
+const { requireEnv } = require('./env');
+const { describeError, withRetry } = require('./net');
+
+// Check configuration before loading the clients, so a missing secret prints
+// one clear line instead of a module-load stack trace.
+let supabase;
+let pingSupabase;
+let SUPABASE_URL;
+let enrichListing;
+try {
+  requireEnv(['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'ANTHROPIC_API_KEY']);
+  ({ supabase, pingSupabase, SUPABASE_URL } = require('./supabase-server'));
+  ({ enrichListing } = require('./enrich'));
+} catch (err) {
+  console.error(`FATAL: ${err.message}`);
+  process.exit(1);
+}
+
 const { scrapePets4Homes } = require('./scrapers/pets4homes');
 const { scrapeGumtree } = require('./scrapers/gumtree');
 
 const CACHE_PATH = path.join(__dirname, 'scrape-cache.json');
 const useCache = process.argv.includes('--use-cache');
 
+// PostgREST caps a single response at 1000 rows by default.
+const SELECT_PAGE_SIZE = 1000;
+const MAX_SELECT_PAGES = 100;
+
 function log(msg) {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   console.log(`[${now}] ${msg}`);
 }
 
+/**
+ * Confirms Supabase is reachable before scraping. Previously the first
+ * Supabase call happened after ~6 minutes of scraping, so an unreachable
+ * project burned the whole run and discarded every listing.
+ */
+async function preflight() {
+  log(`Checking Supabase connection (${new URL(SUPABASE_URL).host})...`);
+  try {
+    await withRetry('Supabase preflight', () => pingSupabase(), { log });
+  } catch (err) {
+    log(`FATAL: ${err.message}`);
+    if (err.hint) log(`HINT: ${err.hint}`);
+    process.exit(1);
+  }
+  log('Supabase connection OK.');
+}
+
+/**
+ * Fetches every existing external_url, paging past the 1000-row response cap.
+ * @returns {Promise<Set<string>>}
+ */
+async function fetchExistingUrls() {
+  const urls = new Set();
+  let from = 0;
+
+  // Advance by rows actually returned, not by the requested page size — the
+  // server may cap responses below SELECT_PAGE_SIZE, and assuming otherwise
+  // would silently truncate the dedupe list.
+  for (let page = 0; page < MAX_SELECT_PAGES; page++) {
+    const rows = await withRetry(`Fetch existing URLs (from row ${from})`, async () => {
+      const { data, error } = await supabase
+        .from('listings')
+        .select('external_url')
+        .order('id', { ascending: true })
+        .range(from, from + SELECT_PAGE_SIZE - 1);
+
+      if (error) throw new Error(error.message);
+      return data || [];
+    }, { log });
+
+    if (rows.length === 0) return urls;
+
+    for (const row of rows) {
+      if (row.external_url) urls.add(row.external_url);
+    }
+    from += rows.length;
+  }
+
+  throw new Error(`Stopped paging existing listings after ${MAX_SELECT_PAGES} pages — the table is larger than expected.`);
+}
+
 async function run() {
   log('Starting pipeline run...');
+
+  await preflight();
 
   let allListings = [];
   let scrapersSucceeded = 0;
@@ -34,7 +105,7 @@ async function run() {
       allListings.push(...p4h);
       scrapersSucceeded++;
     } catch (err) {
-      log(`ERROR: Pets4Homes scraper failed: ${err.message}`);
+      log(`ERROR: Pets4Homes scraper failed: ${describeError(err)}`);
     }
 
     // Run Gumtree scraper
@@ -45,7 +116,7 @@ async function run() {
       allListings.push(...gt);
       scrapersSucceeded++;
     } catch (err) {
-      log(`ERROR: Gumtree scraper failed: ${err.message}`);
+      log(`ERROR: Gumtree scraper failed: ${describeError(err)}`);
     }
 
     if (scrapersSucceeded === 0) {
@@ -59,16 +130,16 @@ async function run() {
   }
 
   // Deduplicate against existing listings in Supabase
-  const { data: existing, error: fetchError } = await supabase
-    .from('listings')
-    .select('external_url');
-
-  if (fetchError) {
-    log(`ERROR: Failed to fetch existing URLs: ${fetchError.message}`);
+  let existingUrls;
+  try {
+    existingUrls = await fetchExistingUrls();
+  } catch (err) {
+    log(`ERROR: Failed to fetch existing URLs: ${describeError(err)}`);
+    log(`The scrape is cached — re-run with \`node pipeline/run.js --use-cache\` to retry without re-scraping.`);
     process.exit(1);
   }
+  log(`${existingUrls.size} listings already in the database`);
 
-  const existingUrls = new Set((existing || []).map(r => r.external_url));
   const dedupedListings = allListings.filter(l => !existingUrls.has(l.external_url));
   const duplicateCount = allListings.length - dedupedListings.length;
 
@@ -85,6 +156,7 @@ async function run() {
   log(`${allListings.length} listings to process (${newListings.length} new, ${duplicateCount} duplicates, ${ageFilteredCount} filtered by age)`);
 
   let inserted = 0;
+  let alreadyPresent = 0;
   let errors = 0;
 
   for (const listing of newListings) {
@@ -94,9 +166,9 @@ async function run() {
     let scores;
     try {
       log(`Enriching: ${label}...`);
-      scores = await enrichListing(listing);
+      scores = await withRetry(`Enrich ${label}`, () => enrichListing(listing), { log });
     } catch (err) {
-      log(`ERROR: Enrichment failed for ${label}: ${err.message}`);
+      log(`ERROR: Enrichment failed for ${label}: ${describeError(err)}`);
       errors++;
       continue;
     }
@@ -123,23 +195,42 @@ async function run() {
     };
 
     try {
-      const { error: insertError } = await supabase
-        .from('listings')
-        .insert(row);
+      // Upsert rather than insert: a retried run (or a listing that appeared
+      // twice across sources) must not fail on the external_url constraint.
+      // ignoreDuplicates leaves any existing row — and its swipe decision — alone.
+      const written = await withRetry(`Insert ${label}`, async () => {
+        const { data, error: insertError } = await supabase
+          .from('listings')
+          .upsert(row, { onConflict: 'external_url', ignoreDuplicates: true })
+          .select('external_url');
+        if (insertError) throw new Error(insertError.message);
+        return (data || []).length > 0;
+      }, { log });
 
-      if (insertError) throw insertError;
-      log(`Inserted: ${label} (score: ${scores.score_overall})`);
-      inserted++;
+      if (written) {
+        log(`Inserted: ${label} (score: ${scores.score_overall})`);
+        inserted++;
+      } else {
+        log(`Already present, skipped: ${label}`);
+        alreadyPresent++;
+      }
     } catch (err) {
-      log(`ERROR: Insert failed for ${label}: ${err.message}`);
+      log(`ERROR: Insert failed for ${label}: ${describeError(err)}`);
       errors++;
     }
   }
 
-  log(`Run complete. ${inserted} inserted, ${duplicateCount} skipped, ${errors} errors.`);
+  log(`Run complete. ${inserted} inserted, ${duplicateCount + alreadyPresent} skipped, ${errors} errors.`);
+
+  // A run where every new listing errored is a broken run, not a quiet one —
+  // exit non-zero so the scheduled job reports it instead of passing silently.
+  if (errors > 0 && inserted === 0) {
+    log(`FATAL: every one of the ${errors} new listing(s) failed to process.`);
+    process.exit(1);
+  }
 }
 
 run().catch(err => {
-  console.error('Unhandled error:', err);
+  console.error(`Unhandled error: ${describeError(err)}`);
   process.exit(1);
 });

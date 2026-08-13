@@ -23,9 +23,13 @@ cat-finder/
 │   ├── listings.ts             # Fetch undecided listings
 │   └── decisions.ts            # Record swipe decisions
 ├── pipeline/
-│   ├── run.js                  # Orchestration script (scrape → enrich → insert)
+│   ├── run.js                  # Orchestration script (preflight → scrape → enrich → insert)
 │   ├── enrich.js               # Claude API enrichment module
+│   ├── env.js                  # Env loading + required-variable validation
+│   ├── net.js                  # Network error unwrapping + retry with backoff
+│   ├── supabase-server.js      # Service-role client + connection preflight
 │   └── scrapers/
+│       ├── fetch-page.js       # HTML fetch with timeout + retry, parsed by cheerio
 │       ├── pets4homes.js       # Pets4Homes scraper
 │       └── gumtree.js          # Gumtree scraper
 ├── supabase/
@@ -52,7 +56,6 @@ All variables must be present in `.env.local` for local development and in Verce
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Frontend only | Supabase anon/public key. Safe to expose in browser. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Pipeline only | Supabase service role key. Never expose in browser. Used by pipeline to bypass RLS. |
 | `ANTHROPIC_API_KEY` | Pipeline only | Claude API key from console.anthropic.com. Never expose in browser. |
-| `FIRECRAWL_API_KEY` | Pipeline only | Firecrawl API key from firecrawl.dev. Never expose in browser. |
 
 `.env.example` should contain all keys with empty values. `.env.local` is gitignored.
 
@@ -207,6 +210,24 @@ The pipeline script maps this shape directly to the `listings` table columns.
 
 ---
 
+## Pipeline Reliability
+
+The pipeline runs unattended on a 4-hourly cron, so failures have to be both rare and legible in the job log.
+
+**Preflight before scraping.** `run.js` validates the required env vars and calls `pingSupabase()` — a single authenticated read of `listings` — before either scraper starts. Scraping takes ~6 minutes; a Supabase problem discovered afterwards would waste the whole run, so configuration and connectivity are checked in the first second instead.
+
+**Errors carry their cause.** Node's `fetch` reports every transport failure as `TypeError: fetch failed`, with the real reason (`ENOTFOUND`, `ECONNRESET`, TLS) hidden on the `cause` chain. `net.js` unwraps that chain into the log line, and the preflight adds a hint for the common cases — most usefully a DNS failure, which is what a paused free-tier Supabase project looks like from CI.
+
+**Retries with backoff.** `withRetry()` retries transient network failures (4 attempts, exponential backoff) around Supabase reads/writes and page fetches. Permanent failures — bad hostname, bad credentials, 4xx — throw on the first attempt rather than burning the backoff budget.
+
+**Timeouts.** Node's `fetch` has no default timeout. Supabase calls use 30s, page fetches 20s, and the workflow job caps at 45 minutes.
+
+**Idempotent writes.** Listings are written with `upsert(..., { onConflict: 'external_url', ignoreDuplicates: true })`, so a re-run cannot fail on the unique constraint and never overwrites a row the user has already swiped. Existing URLs are paged through 1000 at a time — a plain `select` would silently return only the first 1000 and re-process everything beyond that.
+
+**Recoverable scrapes.** Every scrape writes `pipeline/scrape-cache.json`; the workflow uploads it as an artifact when the job fails, and `node pipeline/run.js --use-cache` re-runs the enrich/insert stages against it without re-scraping.
+
+---
+
 ## Key Design Decisions
 
 **Why UI-first?**
@@ -221,5 +242,5 @@ Row-level security is not configured for this app — it's a single-user persona
 **Why service role key in pipeline?**
 The pipeline runs server-side (GitHub Actions) and needs to insert rows without any auth context.
 
-**Why Firecrawl over Playwright?**
-Both Pets4Homes and Gumtree render listings with JavaScript — raw HTTP scraping (Cheerio) returns empty pages. Firecrawl handles JS rendering as a service with a free tier sufficient for this volume. If Firecrawl proves unreliable, fall back to Playwright with `playwright-extra` and `puppeteer-extra-plugin-stealth`.
+**Why fetch + Cheerio over Firecrawl?**
+Firecrawl was the original choice for JS rendering, but both sites serve enough listing markup in the initial HTML response that plain `fetch` plus Cheerio parsing works — and it removes a paid dependency and an API key from the pipeline. If either site moves its listing data behind client-side rendering, fall back to Playwright with `playwright-extra` and `puppeteer-extra-plugin-stealth`.
