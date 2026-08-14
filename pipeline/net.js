@@ -97,6 +97,23 @@ function isRetryable(err) {
 }
 
 /**
+ * Whether an Anthropic request failed because the API could not fetch an
+ * image URL we passed it.
+ *
+ * `image` blocks of type `url` are fetched server-side, which honours the
+ * host's robots.txt. Gumtree's CDN disallows it, so every Gumtree listing 400s
+ * before it can be scored. Callers use this to retry without the photo.
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isImageFetchRejection(err) {
+  if (!err || err.status !== 400) return false;
+  return /robots\.txt|disallowed|unable to fetch|could not fetch|image/i.test(
+    String(err.message || '')
+  );
+}
+
+/**
  * Runs `fn`, retrying transient network failures with exponential backoff.
  * Permanent failures throw straight through so they surface immediately.
  * @param {string} label - Used in retry log lines
@@ -126,4 +143,4 @@ async function withRetry(label, fn, options = {}) {
   throw lastError;
 }
 
-module.exports = { describeError, errorCode, errorChain, isRetryable, withRetry, sleep };
+module.exports = { describeError, errorCode, errorChain, isRetryable, isImageFetchRejection, withRetry, sleep };

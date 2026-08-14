@@ -1,5 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireEnv } = require('./env');
+const { isImageFetchRejection } = require('./net');
 
 const { ANTHROPIC_API_KEY } = requireEnv(['ANTHROPIC_API_KEY']);
 
@@ -51,15 +52,10 @@ function clamp(val) {
  * @returns {Promise<object>}
  */
 async function enrichListing(listing) {
-  const userContent = [];
-
   // Add first photo if available
-  if (listing.photo_urls && listing.photo_urls.length > 0) {
-    userContent.push({
-      type: 'image',
-      source: { type: 'url', url: listing.photo_urls[0] },
-    });
-  }
+  const imageBlock = listing.photo_urls && listing.photo_urls.length > 0
+    ? { type: 'image', source: { type: 'url', url: listing.photo_urls[0] } }
+    : null;
 
   // Build text description
   const parts = [];
@@ -72,19 +68,43 @@ async function enrichListing(listing) {
     parts.push('Age: Unknown');
   }
 
-  userContent.push({ type: 'text', text: parts.join('\n') });
+  const textBlock = { type: 'text', text: parts.join('\n') };
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 512,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userContent }],
-  });
+  function score(content) {
+    return client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      // Five scores plus five rationale sentences; 512 truncated the JSON
+      // mid-string on wordier listings and threw a SyntaxError on parse.
+      max_tokens: 1024,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content }],
+    });
+  }
+
+  let response;
+  try {
+    response = await score(imageBlock ? [imageBlock, textBlock] : [textBlock]);
+  } catch (err) {
+    if (!imageBlock || !isImageFetchRejection(err)) throw err;
+    // Score on the description alone rather than losing the listing.
+    response = await score([textBlock]);
+  }
 
   let text = response.content[0].text.trim();
   // Strip markdown code fences if present
   text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/,'');
-  const parsed = JSON.parse(text);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    // A malformed response is usually model variance, not a permanent fault —
+    // flag it so withRetry gives it another attempt, and quote the payload so
+    // the failure is diagnosable from the run log.
+    const parseError = new Error(`${err.message} — model returned: ${text.slice(0, 200)}`);
+    parseError.retryable = true;
+    throw parseError;
+  }
 
   const score_alone = clamp(parsed.score_alone);
   const score_friendly = clamp(parsed.score_friendly);

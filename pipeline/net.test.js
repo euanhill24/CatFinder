@@ -1,6 +1,6 @@
 // Run with: node pipeline/net.test.js
 const assert = require('assert');
-const { describeError, errorCode, isRetryable, withRetry } = require('./net');
+const { describeError, errorCode, isRetryable, isImageFetchRejection, withRetry } = require('./net');
 
 function fetchFailed(code, message) {
   const cause = new Error(message);
@@ -76,6 +76,27 @@ function fetchFailed(code, message) {
       /fetch failed/
     );
     assert.strictEqual(calls, 1);
+  }
+
+  // isImageFetchRejection singles out the robots.txt 400 that Gumtree photo
+  // URLs trigger, so enrichment can retry without the image
+  {
+    const robots = new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"This URL is disallowed by the website\'s robots.txt file."}}');
+    robots.status = 400;
+    assert.ok(isImageFetchRejection(robots));
+
+    // An unrelated 400 must not be mistaken for one — retrying without the
+    // photo would just burn a second call and fail the same way
+    const billing = new Error('400 credit balance is too low');
+    billing.status = 400;
+    assert.strictEqual(isImageFetchRejection(billing), false);
+
+    // Nor should a non-400, however it is worded
+    const serverSide = new Error('529 image service overloaded');
+    serverSide.status = 529;
+    assert.strictEqual(isImageFetchRejection(serverSide), false);
+
+    assert.strictEqual(isImageFetchRejection(null), false);
   }
 
   console.log('net.test.js: all assertions passed');
