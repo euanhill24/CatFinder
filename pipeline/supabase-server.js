@@ -66,7 +66,14 @@ async function pingSupabase() {
     if (res.status === 401 || res.status === 403) {
       error.hint = 'The SUPABASE_SERVICE_ROLE_KEY secret looks wrong or expired — regenerate it under Project Settings → API and update the repository secret.';
     } else if (res.status === 404) {
-      error.hint = 'The `listings` table was not found. Check the project ref in NEXT_PUBLIC_SUPABASE_URL points at the right project.';
+      // PGRST205 means PostgREST cannot see the table — either it genuinely
+      // does not exist, or its schema cache is stale (common right after a
+      // paused project is restored).
+      error.hint =
+        'PostgREST cannot see the `listings` table. In the Supabase SQL Editor run ' +
+        '`select count(*) from public.listings;` — if it errors, the table is missing, so run `supabase/schema.sql`. ' +
+        'If it returns a count, the schema cache is stale: run `NOTIFY pgrst, \'reload schema\';` or restart the project ' +
+        '(Settings → General → Restart project). Also confirm the project ref in NEXT_PUBLIC_SUPABASE_URL is the project you are looking at.';
     }
     throw error;
   }
