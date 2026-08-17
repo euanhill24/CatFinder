@@ -1,6 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireEnv } = require('./env');
 const { isImageFetchRejection } = require('./net');
+const { parseScoreResponse } = require('./score-response');
 
 const { ANTHROPIC_API_KEY } = requireEnv(['ANTHROPIC_API_KEY']);
 
@@ -90,21 +91,7 @@ async function enrichListing(listing) {
     response = await score([textBlock]);
   }
 
-  let text = response.content[0].text.trim();
-  // Strip markdown code fences if present
-  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/,'');
-
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    // A malformed response is usually model variance, not a permanent fault —
-    // flag it so withRetry gives it another attempt, and quote the payload so
-    // the failure is diagnosable from the run log.
-    const parseError = new Error(`${err.message} — model returned: ${text.slice(0, 200)}`);
-    parseError.retryable = true;
-    throw parseError;
-  }
+  const { scores: parsed, rationale } = parseScoreResponse(response.content[0].text);
 
   const score_alone = clamp(parsed.score_alone);
   const score_friendly = clamp(parsed.score_friendly);
@@ -127,13 +114,7 @@ async function enrichListing(listing) {
     score_distance,
     score_age,
     score_overall,
-    score_rationale: {
-      alone: parsed.rationale.alone,
-      friendly: parsed.rationale.friendly,
-      vibe: parsed.rationale.vibe,
-      distance: parsed.rationale.distance,
-      age: parsed.rationale.age,
-    },
+    score_rationale: rationale,
   };
 }
 
