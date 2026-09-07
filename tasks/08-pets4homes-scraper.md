@@ -100,5 +100,5 @@ Shape assertions for any result:
 
 - Write to Supabase
 - Call the Claude enrichment module
-- Scrape more than 2 pages per run
+- Scrape more than 5 search pages per run (raised from 2; pagination now stops early once a page contributes no new adverts)
 - Throw an unhandled error if one individual listing page fails

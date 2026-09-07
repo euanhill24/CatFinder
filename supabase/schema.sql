@@ -9,6 +9,7 @@ create table listings (
   title           text,
   price           integer,
   age_months      integer,
+  age_source      text,           -- 'attribute' | 'title' | 'description' | null
   sex             text,
   location_raw    text,
   description     text,
@@ -25,3 +26,6 @@ create table listings (
   decision        text,
   decided_at      timestamptz
 );
+
+-- Already created the table? Add the column in place instead:
+--   alter table listings add column if not exists age_source text;

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { requireEnv } = require('./env');
 const { describeError, withRetry } = require('./net');
+const { canonicaliseUrl } = require('./scrapers/parse');
 
 // Check configuration before loading the clients, so a missing secret prints
 // one clear line instead of a module-load stack trace.
@@ -31,6 +32,53 @@ const MAX_SELECT_PAGES = 100;
 function log(msg) {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   console.log(`[${now}] ${msg}`);
+}
+
+// Minimum share of scraped listings that must carry each field. A selector
+// that rots partially — still matching adverts, no longer matching their
+// prices — produces no error and no empty result, so nothing else in this
+// pipeline would notice. Floors are set well below observed healthy rates so
+// a normal run never trips them.
+const FILL_FLOORS = { title: 0.8, photo_urls: 0.5, description: 0.3 };
+
+function isFilled(value) {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'string') return value.trim() !== '';
+  return true;
+}
+
+/**
+ * Logs how completely each field was extracted and returns the fields whose
+ * fill rate fell below its floor.
+ * @param {Array<object>} listings
+ * @returns {string[]} names of fields that breached their floor
+ */
+function reportFieldFill(listings) {
+  if (listings.length === 0) return [];
+
+  const fields = ['title', 'price', 'age_months', 'sex', 'location_raw', 'description', 'photo_urls', 'listed_at'];
+  const summary = [];
+  const breached = [];
+
+  for (const field of fields) {
+    const filled = listings.filter(l => isFilled(l[field])).length;
+    const rate = filled / listings.length;
+    summary.push(`${field} ${filled}/${listings.length}`);
+    if (FILL_FLOORS[field] !== undefined && rate < FILL_FLOORS[field]) {
+      breached.push(`${field} ${(rate * 100).toFixed(0)}% < ${(FILL_FLOORS[field] * 100).toFixed(0)}%`);
+    }
+  }
+  log(`Field fill: ${summary.join(', ')}`);
+
+  // Where the age came from, so a run's age filtering can be audited rather
+  // than trusted: an age read off the page is worth more than one inferred
+  // from prose, and both beat the neutral 5/10 an unknown age is scored.
+  const bySource = {};
+  for (const l of listings) bySource[l.age_source || 'none'] = (bySource[l.age_source || 'none'] || 0) + 1;
+  log(`Age source: ${Object.entries(bySource).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+
+  return breached;
 }
 
 /**
@@ -76,7 +124,10 @@ async function fetchExistingUrls() {
     if (rows.length === 0) return urls;
 
     for (const row of rows) {
-      if (row.external_url) urls.add(row.external_url);
+      // Canonicalise both sides: the scrapers now strip query strings and
+      // fragments, so comparing against raw stored URLs would make every
+      // listing look new and re-insert it.
+      if (row.external_url) urls.add(canonicaliseUrl(row.external_url));
     }
     from += rows.length;
   }
@@ -91,42 +142,55 @@ async function run() {
 
   let allListings = [];
   let scrapersSucceeded = 0;
+  const failedScrapers = [];
 
   if (useCache && fs.existsSync(CACHE_PATH)) {
     allListings = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf-8'));
     log(`Loaded ${allListings.length} listings from scrape cache`);
     scrapersSucceeded = 1;
   } else {
-    // Run Pets4Homes scraper
-    try {
-      log('Scraping Pets4Homes...');
-      const p4h = await scrapePets4Homes();
-      log(`Pets4Homes: ${p4h.length} listings fetched`);
-      allListings.push(...p4h);
-      scrapersSucceeded++;
-    } catch (err) {
-      log(`ERROR: Pets4Homes scraper failed: ${describeError(err)}`);
-    }
+    // A scraper that reaches the site but parses nothing out of it counts as
+    // a failure. Treating an empty array as success is what allowed selector
+    // rot to present as a green run that ingested nothing.
+    const runScraper = async (name, scrape) => {
+      try {
+        log(`Scraping ${name}...`);
+        const results = await scrape();
+        log(`${name}: ${results.length} listings fetched`);
+        if (results.length === 0) {
+          log(`ERROR: ${name} returned no listings — treating as a scraper failure.`);
+          failedScrapers.push(name);
+          return;
+        }
+        allListings.push(...results);
+        scrapersSucceeded++;
+      } catch (err) {
+        log(`ERROR: ${name} scraper failed: ${describeError(err)}`);
+        failedScrapers.push(name);
+      }
+    };
 
-    // Run Gumtree scraper
-    try {
-      log('Scraping Gumtree...');
-      const gt = await scrapeGumtree();
-      log(`Gumtree: ${gt.length} listings fetched`);
-      allListings.push(...gt);
-      scrapersSucceeded++;
-    } catch (err) {
-      log(`ERROR: Gumtree scraper failed: ${describeError(err)}`);
-    }
+    await runScraper('Pets4Homes', scrapePets4Homes);
+    await runScraper('Gumtree', scrapeGumtree);
 
     if (scrapersSucceeded === 0) {
       log('FATAL: Both scrapers failed. Exiting.');
       process.exit(1);
     }
 
-    // Cache scraped listings for retry without re-scraping
-    fs.writeFileSync(CACHE_PATH, JSON.stringify(allListings, null, 2));
-    log(`Cached ${allListings.length} listings to ${CACHE_PATH}`);
+    // Cache scraped listings for retry without re-scraping. Only when there
+    // is something to cache — an unconditional write would replace a usable
+    // cache with [] on exactly the runs the --use-cache path exists for.
+    if (allListings.length > 0) {
+      fs.writeFileSync(CACHE_PATH, JSON.stringify(allListings, null, 2));
+      log(`Cached ${allListings.length} listings to ${CACHE_PATH}`);
+    }
+  }
+
+  const breachedFloors = reportFieldFill(allListings);
+  if (breachedFloors.length > 0) {
+    log(`FATAL: extraction quality below floor (${breachedFloors.join('; ')}) — selectors have probably changed.`);
+    process.exit(1);
   }
 
   // Deduplicate against existing listings in Supabase
@@ -150,7 +214,7 @@ async function run() {
   const MIN_AGE_MONTHS = 6;
   const newListings = dedupedListings.filter(l => {
     if (l.age_months != null && l.age_months < MIN_AGE_MONTHS) {
-      log(`Skipping (under ${MIN_AGE_MONTHS} months): ${l.title || l.external_url}`);
+      log(`Skipping (${l.age_months}mo from ${l.age_source}): ${l.title || l.external_url}`);
       return false;
     }
     return true;
@@ -184,6 +248,7 @@ async function run() {
       title: listing.title,
       price: listing.price,
       age_months: listing.age_months,
+      age_source: listing.age_source,
       sex: listing.sex,
       location_raw: listing.location_raw,
       description: listing.description,
@@ -230,6 +295,15 @@ async function run() {
   // exit non-zero so the scheduled job reports it instead of passing silently.
   if (errors > 0 && inserted === 0) {
     log(`FATAL: every one of the ${errors} new listing(s) failed to process.`);
+    process.exit(1);
+  }
+
+  // One dead scraper is roughly half the funnel — Gumtree supplied 117 of 249
+  // listings on 2026-09-07. Insert whatever the surviving source returned, but
+  // still exit non-zero: a run missing a whole source is not a successful run,
+  // and reporting green is how the previous breakage stayed invisible.
+  if (failedScrapers.length > 0) {
+    log(`FATAL: ${failedScrapers.join(' and ')} produced no listings — this run covered only part of the market.`);
     process.exit(1);
   }
 }

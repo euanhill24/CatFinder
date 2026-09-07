@@ -33,12 +33,12 @@ Same extraction targets:
 - `source` — always the string `"gumtree"`
 
 **Gumtree-specific notes:**
-- Gumtree listing URLs are in the format `https://www.gumtree.com/p/cats-kittens-for-sale/...`
+- Gumtree listing URLs are in the format `https://www.gumtree.com/p/cats/<slug>/<id>` — verified against a live run on 2026-09-07 that harvested 117 adverts. An earlier draft of this file said `/p/cats-kittens-for-sale/...`, which the site does not serve; that claim sent one investigation chasing a scraper bug that did not exist.
 - Price on Gumtree is often listed as "£850 ONO" — parse the numeric part only, strip "ONO", "ono", "or nearest offer"
 - Age on Gumtree may be in a structured field (e.g. "Age: 8 weeks") rather than in description text — check both
 - Some Gumtree listings are free ("Free") — treat as `price: 0`
 - Location on Gumtree includes a region (e.g. "Edinburgh, City of Edinburgh") — keep the full string as `location_raw`
-- Limit to first 2 pages of results (~20–30 listings)
+- Paginate up to 5 search pages, stopping early once a page contributes no new adverts (out-of-range pages re-serve page 1)
 - 500ms delay between individual listing requests
 
 ### 2. Create `pipeline/scrapers/gumtree.test.js`
@@ -68,4 +68,4 @@ Same shape assertions, but `source` must be `"gumtree"`.
 
 - Write to Supabase
 - Call the enrichment module
-- Reuse or modify the Pets4Homes scraper — keep them as separate independent modules
+- ~~Reuse or modify the Pets4Homes scraper~~ — superseded. The shared field parsers now live in `pipeline/scrapers/parse.js` and both scrapers import them. Keeping them separate produced byte-identical copies of `parseAge`/`parsePrice`/`parseSex`, so every fix had to be made twice and none of them could be unit-tested.

@@ -64,9 +64,15 @@ async function enrichListing(listing) {
   parts.push(`Location: ${listing.location_raw || 'Unknown'}`);
   parts.push(`Sex: ${listing.sex || 'unknown'}`);
   if (listing.age_months != null) {
-    parts.push(`Age: ${listing.age_months} months`);
+    // Say where the figure came from: a structured field is the advertiser's
+    // own statement, whereas a title or description reading is our inference.
+    const provenance =
+      listing.age_source && listing.age_source !== 'attribute'
+        ? ` (inferred from the ${listing.age_source})`
+        : '';
+    parts.push(`Age: ${listing.age_months} months${provenance}`);
   } else {
-    parts.push('Age: Unknown');
+    parts.push('Age: Unknown (not stated in the listing)');
   }
 
   const textBlock = { type: 'text', text: parts.join('\n') };

@@ -73,6 +73,7 @@ create table listings (
   title           text,
   price           integer,                    -- pence, nullable
   age_months      integer,                    -- nullable
+  age_source      text,                       -- 'attribute' | 'title' | 'description' | null
   sex             text,                       -- 'male' | 'female' | 'unknown'
   location_raw    text,                       -- as listed on source site
   description     text,
@@ -198,11 +199,12 @@ Both scrapers must return an array of objects matching this shape:
   title: 'Beautiful ragdoll kitten',
   price: 85000,               // pence (£850), or null
   age_months: 18,             // integer, or null
+  age_source: 'attribute',    // where the age was read from, or null
   sex: 'female',              // 'male' | 'female' | 'unknown'
   location_raw: 'Edinburgh, Midlothian',
   description: 'Full listing text...',
   photo_urls: ['https://...', 'https://...'],  // at least one if available
-  listed_at: '2026-03-01T10:00:00Z'  // ISO string, or null
+  listed_at: '2026-03-01T10:00:00Z'  // ISO string, or null (JSON-LD datePosted / ad-posted-date)
 }
 ```
 
@@ -218,7 +220,7 @@ The pipeline runs unattended on a 4-hourly cron, so failures have to be both rar
 
 **Errors carry their cause.** Node's `fetch` reports every transport failure as `TypeError: fetch failed`, with the real reason (`ENOTFOUND`, `ECONNRESET`, TLS) hidden on the `cause` chain. `net.js` unwraps that chain into the log line, and the preflight adds a hint for the common cases — most usefully a DNS failure, which is what a paused free-tier Supabase project looks like from CI.
 
-**Retries with backoff.** `withRetry()` retries transient network failures (4 attempts, exponential backoff) around Supabase reads/writes and page fetches. Permanent failures — bad hostname, bad credentials, 4xx — throw on the first attempt rather than burning the backoff budget.
+**Retries with backoff.** `withRetry()` retries transient network failures with exponential backoff — 4 attempts around Supabase reads/writes, 3 around page fetches (`fetch-page.js`). Permanent failures — bad hostname, bad credentials, 4xx — throw on the first attempt rather than burning the backoff budget.
 
 **Timeouts.** Node's `fetch` has no default timeout. Supabase calls use 30s, page fetches 20s, and the workflow job caps at 45 minutes.
 

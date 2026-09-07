@@ -7,6 +7,7 @@ export interface Listing {
   title: string | null;
   price: number | null;
   age_months: number | null;
+  age_source: string | null;
   sex: string | null;
   location_raw: string | null;
   description: string | null;

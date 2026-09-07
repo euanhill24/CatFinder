@@ -174,7 +174,9 @@ A scraping service that handles JavaScript-rendered pages (which both Pets4Homes
 **Fallback: Playwright with stealth plugin**
 If Firecrawl proves insufficient or unreliable, switch to a self-managed Playwright instance running in GitHub Actions. Free, but requires selector maintenance if sites change their structure.
 
-Neither Pets4Homes nor Gumtree have public APIs or RSS feeds. Direct HTTP/HTML scraping (Cheerio) will not work — both sites render listings with JavaScript.
+Neither Pets4Homes nor Gumtree have public APIs or RSS feeds.
+
+> **Superseded.** This section describes the original plan. Both sites turned out to serve enough listing markup in the initial HTML response that `fetch` + Cheerio works, so Firecrawl was removed (commit `e9ed339`) along with its paid dependency and API key. `FIRECRAWL_API_KEY` is no longer required anywhere. See "Why fetch + Cheerio over Firecrawl?" in `ARCHITECTURE.md` for the current approach and the Playwright fallback if either site moves to client-side rendering.
 
 ### 10.3 Pipeline
 

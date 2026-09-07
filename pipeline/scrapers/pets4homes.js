@@ -1,154 +1,163 @@
 const { fetchPage } = require('./fetch-page');
+const { sleep, parsePrice, parseSex, parseAge, canonicaliseUrl } = require('./parse');
 
 const BASE_URL = 'https://www.pets4homes.co.uk/sale/cats/ragdoll/';
 const MAX_PAGES = 5;
 const DELAY_MS = 500;
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+/**
+ * Every JSON-LD Product block on the page. `@type` is sometimes an array
+ * (`["Product","Offer"]`), which an `=== 'Product'` check silently skipped.
+ * @param {import('cheerio').CheerioAPI} $
+ * @returns {object[]}
+ */
+function productJsonLd($) {
+  const products = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const parsed = JSON.parse($(el).html());
+      for (const node of Array.isArray(parsed) ? parsed : [parsed]) {
+        const type = node && node['@type'];
+        const types = Array.isArray(type) ? type : [type];
+        if (types.includes('Product')) products.push(node);
+      }
+    } catch {
+      // A malformed block is not a reason to lose the rest of the page.
+    }
+  });
+  return products;
 }
 
-function parsePrice(text) {
-  if (!text) return null;
-  const match = text.replace(/,/g, '').match(/£\s*([\d.]+)/);
-  if (!match) return null;
-  return Math.round(parseFloat(match[1]) * 100);
-}
+/**
+ * Structured attributes keyed by lowercased name.
+ *
+ * Pairs each name with the value inside its own row. The previous version
+ * indexed two independent global node lists by ordinal, so a single row
+ * rendered without a value shifted every later pair — `age` would then
+ * silently return a neighbouring attribute's text.
+ * @param {import('cheerio').CheerioAPI} $
+ * @returns {Record<string, string>}
+ */
+function extractAttributes($) {
+  const attrs = {};
+  $('[data-testid="attribute-name"]').each((_, el) => {
+    const $name = $(el);
+    const name = $name.text().trim().replace(/:$/, '').toLowerCase();
+    if (!name) return;
 
-function parseAge(text) {
-  if (!text) return null;
-
-  // Handle compound: "1 year, 4 months" or "2 years 3 months"
-  const compoundMatch = text.match(/(\d+)\s*years?\s*,?\s*(\d+)\s*months?/i);
-  if (compoundMatch) return parseInt(compoundMatch[1]) * 12 + parseInt(compoundMatch[2]);
-
-  const yearsMatch = text.match(/(\d+)\s*years?/i);
-  if (yearsMatch) return parseInt(yearsMatch[1]) * 12;
-
-  const monthsMatch = text.match(/(\d+)\s*months?/i);
-  if (monthsMatch) return parseInt(monthsMatch[1]);
-
-  const weeksMatch = text.match(/(\d+)\s*weeks?/i);
-  if (weeksMatch) return Math.max(1, Math.round(parseInt(weeksMatch[1]) / 4.33));
-
-  return null;
-}
-
-function parseSex(text) {
-  if (!text) return 'unknown';
-  const lower = text.toLowerCase();
-  if (lower.includes('female') || lower.includes('girl')) return 'female';
-  if (lower.includes('male') || lower.includes('boy')) return 'male';
-  return 'unknown';
+    let value = $name.parent().find('[data-testid="attribute-value"]').first().text().trim();
+    if (!value) {
+      value = $name.nextAll('[data-testid="attribute-value"]').first().text().trim();
+    }
+    attrs[name] = value;
+  });
+  return attrs;
 }
 
 function extractListingUrls($) {
   const urls = [];
   $('a[href*="/classifieds/"]').each((_, el) => {
     const href = $(el).attr('href');
-    if (href) {
-      const fullUrl = href.startsWith('http')
-        ? href
-        : `https://www.pets4homes.co.uk${href}`;
-      if (!urls.includes(fullUrl)) urls.push(fullUrl);
-    }
+    if (!href) return;
+    const fullUrl = canonicaliseUrl(
+      href.startsWith('http') ? href : `https://www.pets4homes.co.uk${href}`
+    );
+    if (!urls.includes(fullUrl)) urls.push(fullUrl);
   });
   return urls;
 }
 
-async function scrapeListingPage(url) {
-  const $ = await fetchPage(url);
+function extractLocationFromUrl(url) {
+  const slugMatch = url.match(/\/classifieds\/[^/]+-in-([^/]+)/i);
+  if (!slugMatch) return null;
+  return slugMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
 
-  // Title
+function firstDate(...values) {
+  for (const value of values) {
+    if (!value || typeof value !== 'string') continue;
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return null;
+}
+
+/**
+ * Extracts a listing from an already-loaded page. Kept separate from the
+ * fetch so tests can drive it from a saved fixture.
+ * @param {import('cheerio').CheerioAPI} $
+ * @param {string} url
+ * @returns {object}
+ */
+function parseListingPage($, url) {
+  const products = productJsonLd($);
+  const attrs = extractAttributes($);
+
   const title = $('h1').first().text().trim() || null;
 
-  // Price — data-testid selector, fallback to any text with £
   const priceText =
     $('[data-testid="advert-listing-price"]').first().text() ||
     $('[data-testid="pet-price"]').first().text();
   const price = parsePrice(priceText);
 
-  // Location — reliable data-testid selector
   const location_raw =
     $('[data-testid="listing-location"]').first().text().trim() ||
     $('[data-testid="location-button"]').first().text().trim() ||
     extractLocationFromUrl(url);
 
-  // Extract structured attributes (Age, Sex, etc.)
-  const attrs = {};
-  $('[data-testid="attribute-name"]').each((i, el) => {
-    const name = $(el).text().trim();
-    const value = $('[data-testid="attribute-value"]').eq(i).text().trim();
-    attrs[name] = value;
-  });
-
-  // Age
-  const age_months = parseAge(attrs['Age'] || null);
-
-  // Sex — from "Pets in litter" field (e.g. "1 male / 3 female") or general attributes
-  const sex = parseSex(attrs['Pets in litter'] || attrs['Gender'] || attrs['Sex'] || '');
-
-  // Description — from JSON-LD (most reliable) or data-testid
-  let description = null;
-  $('script[type="application/ld+json"]').each((_, el) => {
-    try {
-      const j = JSON.parse($(el).html());
-      if (j['@type'] === 'Product' && j.description) {
-        description = j.description;
-      }
-    } catch (e) {}
-  });
+  // Description drives 55% of the composite score (alone 35% + friendly 20%),
+  // so keep a short one rather than discarding it and scoring on nothing.
+  let description = products.find(p => p.description)?.description || null;
   if (!description) {
     const descEl = $('[data-testid="listing-description"]');
-    if (descEl.length) {
-      // Remove the "Description" heading text
-      description = descEl.text().trim().replace(/^Description\s*/i, '');
+    if (descEl.length) description = descEl.text().trim().replace(/^Description\s*/i, '');
+  }
+  description = description && description.trim() ? description.trim() : null;
+
+  // Age from the structured field first, then the title, then the description.
+  // Reading only the attribute meant a listing titled "9 WEEKS OLD RAGDOLL
+  // KITTEN" with no Age field was stored as unknown and scored a neutral 5/10.
+  const age = parseAge([
+    { source: 'attribute', text: attrs['age'] },
+    { source: 'title', text: title },
+    { source: 'description', text: description },
+  ]);
+
+  const sex = parseSex(attrs['pets in litter'] || attrs['gender'] || attrs['sex'] || '');
+
+  const photo_urls = [];
+  for (const product of products) {
+    if (!product.image) continue;
+    for (const img of Array.isArray(product.image) ? product.image : [product.image]) {
+      if (typeof img === 'string' && !photo_urls.includes(img)) photo_urls.push(img);
     }
   }
-  if (description && description.length < 50) description = null;
-
-  // Photos — from JSON-LD image array (best), then OG image, then page images
-  const photo_urls = [];
-  $('script[type="application/ld+json"]').each((_, el) => {
-    try {
-      const j = JSON.parse($(el).html());
-      if (j['@type'] === 'Product' && j.image) {
-        const images = Array.isArray(j.image) ? j.image : [j.image];
-        images.forEach(img => {
-          if (typeof img === 'string' && !photo_urls.includes(img)) photo_urls.push(img);
-        });
-      }
-    } catch (e) {}
-  });
   const ogImage = $('meta[property="og:image"]').attr('content');
   if (ogImage && !photo_urls.includes(ogImage)) photo_urls.unshift(ogImage);
 
+  const listed_at = firstDate(
+    ...products.map(p => p.datePosted),
+    ...products.map(p => p.offers && p.offers.validFrom),
+    $('meta[property="article:published_time"]').attr('content')
+  );
+
   return {
-    external_url: url,
+    external_url: canonicaliseUrl(url),
     title,
     price,
-    age_months,
+    age_months: age.months,
+    age_source: age.source,
     sex,
     location_raw: location_raw || null,
     description,
     photo_urls,
-    listed_at: null,
+    listed_at,
     source: 'pets4homes',
   };
 }
 
-function extractLocationFromUrl(url) {
-  const slugMatch = url.match(/\/classifieds\/[^/]+-in-([^/]+)/i);
-  if (slugMatch) {
-    return slugMatch[1]
-      .replace(/-/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
-  }
-  // Try the last segment before trailing slash
-  const parts = url.replace(/\/$/, '').split('-');
-  // URL format: /classifieds/ID-title-words-LOCATION/
-  // Location is typically the last hyphenated word(s) after the title
-  return null;
+async function scrapeListingPage(url) {
+  return parseListingPage(await fetchPage(url), url);
 }
 
 /**
@@ -162,13 +171,34 @@ async function scrapePets4Homes() {
     const url = page === 1 ? BASE_URL : `${BASE_URL}?page=${page}`;
     console.log(`  Scraping search page ${page}: ${url}`);
 
+    let urls;
     try {
       const $ = await fetchPage(url);
-      const urls = extractListingUrls($);
-      console.log(`  Found ${urls.length} listing URLs on page ${page}`);
-      allListingUrls.push(...urls);
+      urls = extractListingUrls($);
     } catch (err) {
+      // Page 1 failing means we have nothing; later pages are best-effort.
+      if (page === 1) throw err;
       console.warn(`  Warning: Error scraping search page ${page}: ${err.message}`);
+      continue;
+    }
+
+    console.log(`  Found ${urls.length} listing URLs on page ${page}`);
+
+    // An empty first page is broken markup, not an empty market — Pets4Homes
+    // always has ragdolls listed. Raising it here is what stops a selector
+    // change from being reported as a successful run that ingested nothing.
+    if (page === 1 && urls.length === 0) {
+      throw new Error(
+        `Pets4Homes returned no listing URLs on page 1 (${url}) — the listing-link selector has probably changed.`
+      );
+    }
+
+    const before = allListingUrls.length;
+    allListingUrls.push(...urls);
+    // Out-of-range pages re-serve page 1, which the de-dupe below would hide.
+    if (page > 1 && new Set(allListingUrls).size === before) {
+      console.log(`  Page ${page} added no new listings — stopping pagination`);
+      break;
     }
 
     if (page < MAX_PAGES) await sleep(DELAY_MS);
@@ -182,8 +212,7 @@ async function scrapePets4Homes() {
     const url = uniqueUrls[i];
     try {
       console.log(`  [${i + 1}/${uniqueUrls.length}] Scraping: ${url}`);
-      const listing = await scrapeListingPage(url);
-      listings.push(listing);
+      listings.push(await scrapeListingPage(url));
     } catch (err) {
       console.warn(`  Warning: Failed to scrape listing ${url}: ${err.message}`);
     }
@@ -193,4 +222,4 @@ async function scrapePets4Homes() {
   return listings;
 }
 
-module.exports = { scrapePets4Homes };
+module.exports = { scrapePets4Homes, extractListingUrls, extractAttributes, parseListingPage, scrapeListingPage };

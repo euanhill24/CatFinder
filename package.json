@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node pipeline/net.test.js && node pipeline/score-response.test.js && node pipeline/scrapers/pets4homes.test.js && node pipeline/scrapers/gumtree.test.js"
+    "test": "node pipeline/net.test.js && node pipeline/score-response.test.js && node pipeline/scrapers/parse.test.js && node pipeline/scrapers/pets4homes.test.js && node pipeline/scrapers/gumtree.test.js"
   },
   "repository": {
     "type": "git",
