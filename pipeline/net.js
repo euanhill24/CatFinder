@@ -103,12 +103,17 @@ function isRetryable(err) {
  * `image` blocks of type `url` are fetched server-side, which honours the
  * host's robots.txt. Gumtree's CDN disallows it, so every Gumtree listing 400s
  * before it can be scored. Callers use this to retry without the photo.
+ *
+ * The API words this refusal several ways and does not always say "image" —
+ * "Unable to download the file. Please verify the URL and try again." is the
+ * common one, and matching only the robots.txt phrasing let it through as a
+ * fatal error, dropping the listing instead of rescoring it without the photo.
  * @param {unknown} err
  * @returns {boolean}
  */
 function isImageFetchRejection(err) {
   if (!err || err.status !== 400) return false;
-  return /robots\.txt|disallowed|unable to fetch|could not fetch|image/i.test(
+  return /robots\.txt|disallowed|unable to (fetch|download|access|retrieve)|could not (fetch|download|access|retrieve)|(download|fetch)(ing)? the file|image/i.test(
     String(err.message || '')
   );
 }

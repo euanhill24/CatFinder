@@ -85,6 +85,12 @@ function fetchFailed(code, message) {
     robots.status = 400;
     assert.ok(isImageFetchRejection(robots));
 
+    // The wording that actually reached the scheduled runs: no "image", no
+    // "robots.txt", so the old matcher called it fatal and dropped the listing
+    const download = new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"Unable to download the file. Please verify the URL and try again."},"request_id":"req_011CeopvVyYrWwifz3mcG51R"}');
+    download.status = 400;
+    assert.ok(isImageFetchRejection(download));
+
     // An unrelated 400 must not be mistaken for one — retrying without the
     // photo would just burn a second call and fail the same way
     const billing = new Error('400 credit balance is too low');
