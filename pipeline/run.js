@@ -143,10 +143,14 @@ async function run() {
   const dedupedListings = allListings.filter(l => !existingUrls.has(l.external_url));
   const duplicateCount = allListings.length - dedupedListings.length;
 
-  // Filter out kittens under 12 months — older cats only
+  // Drop only very young kittens. The PRD prefers older cats but does not
+  // exclude kittens — that preference is the `age` sub-score's job. A 12-month
+  // cutoff here was doing the excluding instead, dropping 208 of 232 scraped
+  // listings in a single run, because ragdoll ads are overwhelmingly kittens.
+  const MIN_AGE_MONTHS = 6;
   const newListings = dedupedListings.filter(l => {
-    if (l.age_months != null && l.age_months < 12) {
-      log(`Skipping (under 12 months): ${l.title || l.external_url}`);
+    if (l.age_months != null && l.age_months < MIN_AGE_MONTHS) {
+      log(`Skipping (under ${MIN_AGE_MONTHS} months): ${l.title || l.external_url}`);
       return false;
     }
     return true;
