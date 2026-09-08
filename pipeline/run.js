@@ -20,6 +20,7 @@ try {
 
 const { scrapePets4Homes } = require('./scrapers/pets4homes');
 const { scrapeGumtree } = require('./scrapers/gumtree');
+const { partitionBySeen, chunk } = require('./listing-sets');
 
 const CACHE_PATH = path.join(__dirname, 'scrape-cache.json');
 const useCache = process.argv.includes('--use-cache');
@@ -27,6 +28,15 @@ const useCache = process.argv.includes('--use-cache');
 // PostgREST caps a single response at 1000 rows by default.
 const SELECT_PAGE_SIZE = 1000;
 const MAX_SELECT_PAGES = 100;
+
+// `in.(...)` filters travel in the query string, so last_seen_at refreshes go
+// out in batches rather than as one URL long enough to be rejected.
+const TOUCH_CHUNK_SIZE = 20;
+
+// Mirrors STALE_AFTER_DAYS in temp-next-app/lib/listings.ts. Duplicated
+// because the pipeline is plain CommonJS and the app is TypeScript; it is used
+// only for log wording, never for a query, so a drift here cannot hide cats.
+const APP_STALE_AFTER_DAYS = 7;
 
 function log(msg) {
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -82,6 +92,39 @@ async function fetchExistingUrls() {
   }
 
   throw new Error(`Stopped paging existing listings after ${MAX_SELECT_PAGES} pages — the table is larger than expected.`);
+}
+
+/**
+ * Marks every still-listed URL as seen now.
+ *
+ * This is the whole of the sold-listing story: the scrapers cannot tell a sold
+ * cat from a live one, but a sold cat stops appearing on the source site, so
+ * its last_seen_at stops advancing and the app filters it out. Runs before
+ * enrichment so a Claude API outage cannot age out live listings.
+ *
+ * @param {string[]} urls - external_urls observed in this run.
+ * @returns {Promise<number>} Rows actually updated.
+ */
+async function touchLastSeen(urls) {
+  if (urls.length === 0) return 0;
+
+  const seenAt = new Date().toISOString();
+  let touched = 0;
+
+  for (const batch of chunk(urls, TOUCH_CHUNK_SIZE)) {
+    touched += await withRetry(`Refresh last_seen_at (${batch.length} listings)`, async () => {
+      const { data, error } = await supabase
+        .from('listings')
+        .update({ last_seen_at: seenAt })
+        .in('external_url', batch)
+        .select('external_url');
+
+      if (error) throw new Error(error.message);
+      return (data || []).length;
+    }, { log });
+  }
+
+  return touched;
 }
 
 async function run() {
@@ -140,8 +183,19 @@ async function run() {
   }
   log(`${existingUrls.size} listings already in the database`);
 
-  const dedupedListings = allListings.filter(l => !existingUrls.has(l.external_url));
+  const { newListings: dedupedListings, seenAgainUrls } = partitionBySeen(allListings, existingUrls);
   const duplicateCount = allListings.length - dedupedListings.length;
+
+  // A refresh failure is not fatal — the run can still insert new cats — but it
+  // is worth shouting about, because listings that go unrefreshed long enough
+  // vanish from the app as though they had been sold.
+  try {
+    const touched = await touchLastSeen(seenAgainUrls);
+    log(`Refreshed last_seen_at on ${touched} still-live listing(s)`);
+  } catch (err) {
+    log(`ERROR: Failed to refresh last_seen_at: ${describeError(err)}`);
+    log(`Listings left unrefreshed for ${APP_STALE_AFTER_DAYS} days disappear from the app — fix before then.`);
+  }
 
   // Drop only very young kittens. The PRD prefers older cats but does not
   // exclude kittens — that preference is the `age` sub-score's job. A 12-month
@@ -189,6 +243,7 @@ async function run() {
       description: listing.description,
       photo_urls: listing.photo_urls,
       listed_at: listing.listed_at,
+      last_seen_at: new Date().toISOString(),
       score_alone: scores.score_alone,
       score_friendly: scores.score_friendly,
       score_vibe: scores.score_vibe,

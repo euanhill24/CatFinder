@@ -4,16 +4,25 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getLikedListings } from "@/lib/liked";
 import { Listing } from "@/lib/listings";
+import { ConfigError, describeError } from "@/lib/errors";
 import LikedListItem from "@/components/LikedListItem";
+import ErrorState from "@/components/ErrorState";
 
 export default function LikedPage() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<{ message: string; isConfig: boolean } | null>(null);
 
   useEffect(() => {
     getLikedListings()
       .then(setListings)
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to load liked listings:", err);
+        setLoadError({
+          message: describeError(err),
+          isConfig: err instanceof ConfigError,
+        });
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -33,6 +42,8 @@ export default function LikedPage() {
       <div className="px-4 pb-8 pt-2">
         {loading ? (
           <p className="py-12 text-center text-bark">Loading...</p>
+        ) : loadError ? (
+          <ErrorState message={loadError.message} isConfigError={loadError.isConfig} compact />
         ) : listings.length === 0 ? (
           <div className="flex flex-col items-center py-20 text-center">
             <p className="text-[80px] leading-none">🐾</p>

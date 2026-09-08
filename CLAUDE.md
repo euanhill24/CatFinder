@@ -39,6 +39,8 @@ node pipeline/run.js   # Scrape → enrich → insert (requires .env.local)
 - **No auth/RLS:** Single-user personal tool. Anon key gives full read/write to `listings`.
 - **No AI branding:** Scores displayed as plain attributes, never labelled "AI summary" or similar.
 - **Path alias:** `@/*` maps to project root in TypeScript imports.
-- **Env vars:** Copy `.env.example` to `.env.local`. Frontend uses `NEXT_PUBLIC_*` vars only. Pipeline uses `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`.
+- **Env vars:** Copy `.env.example` to **two** places — `.env.local` at the repo root (pipeline) and `temp-next-app/.env.local` (frontend). Next.js only reads env files from its own project directory, so a root-only copy leaves the app with no credentials. Frontend uses `NEXT_PUBLIC_*` vars only; pipeline uses `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`. `NEXT_PUBLIC_*` values are inlined at build time — changing them in Vercel needs a redeploy.
+- **Fail loudly:** A database read that fails must never render as an empty state. `getSupabase()` throws `ConfigError` on missing env vars, and every caller shows `ErrorState` with the real message. Silent `.catch(console.error)` in a data path is a bug.
 - **Database changes:** Run SQL directly in Supabase SQL Editor — no migration tooling.
-- **Deduplication:** `external_url` is the unique key for listings.
+- **Deduplication:** `external_url` is the unique key for listings. Existing rows are never rewritten (`upsert` with `ignoreDuplicates`), so a swipe decision is safe from re-scrapes.
+- **Sold listings:** Inferred from absence, not detected. The pipeline refreshes `last_seen_at` for every URL it sees; the swipe deck hides anything unseen for `STALE_AFTER_DAYS` (7). Saved cats are badged "No longer listed" rather than hidden. See "Sold and Stale Listings" in `ARCHITECTURE.md`.

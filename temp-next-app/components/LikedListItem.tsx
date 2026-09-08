@@ -1,4 +1,4 @@
-import { Listing } from "@/lib/listings";
+import { Listing, isStale } from "@/lib/listings";
 
 function formatAge(months: number | null): string {
   if (months == null) return "Age unknown";
@@ -39,13 +39,18 @@ function sanitizeLocation(loc: string | null): string | null {
 export default function LikedListItem({ listing }: { listing: Listing }) {
   const photoUrl = listing.photo_urls?.[0];
   const location = sanitizeLocation(listing.location_raw);
+  // Saved cats are never hidden when they go stale — a cat you liked that has
+  // since been taken down is exactly the thing you need to be told about.
+  const gone = isStale(listing);
 
   return (
     <a
       href={listing.external_url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-[0_4px_16px_rgba(100,40,20,0.08)] active:bg-fog"
+      className={`flex items-center gap-3 rounded-xl bg-card p-3 shadow-[0_4px_16px_rgba(100,40,20,0.08)] active:bg-fog ${
+        gone ? "opacity-60" : ""
+      }`}
     >
       {/* Thumbnail */}
       {photoUrl ? (
@@ -65,6 +70,11 @@ export default function LikedListItem({ listing }: { listing: Listing }) {
         <p className="truncate text-sm font-semibold text-ink">
           {listing.title ?? "Unnamed cat"}
         </p>
+        {gone && (
+          <span className="mt-0.5 inline-block rounded-full bg-fog px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-bark">
+            No longer listed
+          </span>
+        )}
         <p className="text-xs text-bark">
           {formatAge(listing.age_months)} · {location ?? "Location unknown"}
         </p>

@@ -34,13 +34,14 @@ cat-finder/
 │       └── gumtree.js          # Gumtree scraper
 ├── supabase/
 │   ├── schema.sql              # Full table definition
+│   ├── alter-add-last-seen-at.sql  # Adds sold/stale tracking to an existing table
 │   └── seed.sql                # 5 fake cat listings for UI testing
 ├── .github/
 │   └── workflows/
 │       └── scrape.yml          # Cron pipeline trigger
 ├── public/
 │   └── manifest.json           # PWA manifest
-├── .env.example                # Template — copy to .env.local
+├── .env.example                # Template — copy to .env.local (see Environment Variables)
 └── PRD.md                      # Product requirements
 ```
 
@@ -48,7 +49,22 @@ cat-finder/
 
 ## Environment Variables
 
-All variables must be present in `.env.local` for local development and in Vercel / GitHub Actions secrets for production.
+Two separate `.env.local` files are needed for local development, because the
+pipeline and the Next.js app read different ones:
+
+| Runtime | File it reads |
+|---|---|
+| Pipeline (`node pipeline/run.js`) | `.env.local` at the repo root (`pipeline/env.js` resolves this path explicitly) |
+| Next.js app (`npm run dev` in `temp-next-app/`) | `temp-next-app/.env.local` — Next only reads env files from its own project directory |
+
+A root-only `.env.local` leaves the frontend with no Supabase credentials at
+all, which is why the app must be told about missing variables loudly rather
+than rendering an empty deck.
+
+In production the same values live in the Vercel project settings (frontend)
+and GitHub Actions secrets (pipeline). `NEXT_PUBLIC_*` values are inlined into
+the browser bundle **at build time**, so changing them in Vercel requires a
+redeploy to take effect.
 
 | Variable | Used by | Description |
 |---|---|---|
@@ -79,6 +95,7 @@ create table listings (
   photo_urls      text[],                     -- array of image URLs
   listed_at       timestamptz,                -- when listed on source site
   ingested_at     timestamptz default now(),  -- when pipeline picked it up
+  last_seen_at    timestamptz not null default now(),  -- last run that saw it on the source site
   score_alone     numeric,                    -- 0–10
   score_friendly  numeric,                    -- 0–10
   score_vibe      numeric,                    -- 0–10
@@ -90,6 +107,31 @@ create table listings (
   decided_at      timestamptz                 -- nullable
 );
 ```
+
+---
+
+## Sold and Stale Listings
+
+Neither Pets4Homes nor Gumtree marks an advert as sold in a way the scrapers
+can read — a sold cat simply stops appearing. Staleness is therefore inferred
+from absence, using `listings.last_seen_at`:
+
+| Layer | Behaviour |
+|---|---|
+| **Scraper** | Unchanged — it reports whatever is currently listed. It makes no sold/live judgement. |
+| **Pipeline** | Splits each scrape into new listings and already-stored URLs (`pipeline/listing-sets.js`). Every already-stored URL it saw has its `last_seen_at` refreshed to now, in batches, *before* enrichment — so a Claude API outage cannot age out live listings. New rows get `last_seen_at` on insert. |
+| **Database** | `last_seen_at timestamptz not null default now()`, indexed. Rows are still never deleted; a sold cat keeps its history and its swipe decision. |
+| **App (deck)** | `getUndecidedListings()` filters `last_seen_at >= now() - 7 days` (`STALE_AFTER_DAYS`), so sold cats stop being offered. |
+| **App (saved)** | Saved cats are **never hidden** — a liked cat that has been taken down is exactly what you need to know about. It is dimmed and badged "No longer listed" instead. |
+
+The window is 7 days against a 4-hourly cron, so roughly 42 consecutive failed
+runs would be needed before a live listing is wrongly hidden. A failure to
+refresh is logged as an `ERROR` but does not fail the run.
+
+**Known limitation:** both scrapers only walk the first 5 search pages. A live
+listing that falls past page 5 stops being seen and will eventually be treated
+as sold. Raising `MAX_PAGES`, or re-checking stored URLs directly, would fix
+this properly.
 
 ---
 
