@@ -84,7 +84,11 @@ export default function Home() {
           setLikedCount((c) => c + 1);
         } else if (direction === "left") {
           await dismissCat(id);
+        } else {
+          return;
         }
+        // A write got through, so any banner from an earlier failure is stale.
+        setSaveError(null);
       } catch (err) {
         reportSaveFailure(listing, err);
       }
@@ -125,6 +129,7 @@ export default function Home() {
         } else {
           await dismissCat(detailListing.id);
         }
+        setSaveError(null);
       } catch (err) {
         reportSaveFailure(detailListing, err);
       }
