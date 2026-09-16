@@ -15,6 +15,11 @@ create table listings (
   photo_urls      text[],
   listed_at       timestamptz,
   ingested_at     timestamptz default now(),
+  -- Last pipeline run that saw this listing on the source site. The pipeline
+  -- refreshes it for every URL it observes, so a sold listing stops advancing
+  -- and the app filters it out. See supabase/alter-add-last-seen-at.sql for
+  -- adding this to a table created before the column existed.
+  last_seen_at    timestamptz not null default now(),
   score_alone     numeric,
   score_friendly  numeric,
   score_vibe      numeric,
@@ -25,3 +30,6 @@ create table listings (
   decision        text,
   decided_at      timestamptz
 );
+
+-- Supports the app's staleness filter (last_seen_at >= now() - 7 days).
+create index listings_last_seen_at_idx on listings (last_seen_at);

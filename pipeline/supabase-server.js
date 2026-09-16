@@ -45,7 +45,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 async function pingSupabase() {
   let res;
   try {
-    res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/listings?select=external_url&limit=1`, {
+    res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/listings?select=external_url,last_seen_at&limit=1`, {
       headers: {
         apikey: SERVICE_ROLE_KEY,
         Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
@@ -65,6 +65,14 @@ async function pingSupabase() {
     error.retryable = res.status >= 500 || res.status === 429;
     if (res.status === 401 || res.status === 403) {
       error.hint = 'The SUPABASE_SERVICE_ROLE_KEY secret looks wrong or expired — regenerate it under Project Settings → API and update the repository secret.';
+    } else if (body.includes('last_seen_at')) {
+      // Selecting last_seen_at doubles as a schema check: the pipeline refreshes
+      // it every run so the app can hide sold listings, and a table predating
+      // that column would silently break the whole staleness mechanism.
+      error.retryable = false;
+      error.hint =
+        'The `listings` table is missing the `last_seen_at` column. Paste ' +
+        '`supabase/alter-add-last-seen-at.sql` into the Supabase SQL Editor and run it.';
     } else if (res.status === 404) {
       // PGRST205 means PostgREST cannot see the table — either it genuinely
       // does not exist, or its schema cache is stale (common right after a

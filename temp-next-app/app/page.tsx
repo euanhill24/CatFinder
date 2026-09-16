@@ -4,11 +4,15 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import TinderCard from "react-tinder-card";
 import { getUndecidedListings, Listing } from "@/lib/listings";
 import { likeCat, dismissCat } from "@/lib/decisions";
+import { ConfigError, describeError } from "@/lib/errors";
 import CatCard from "@/components/CatCard";
 import DetailModal from "@/components/DetailModal";
 import LikedDrawer from "@/components/LikedDrawer";
+import ErrorState from "@/components/ErrorState";
 
 type API = { swipe(dir?: string): Promise<void>; restoreCard(): Promise<void> };
+
+type LoadError = { message: string; isConfig: boolean };
 
 const emptySubtexts = [
   "New cats drop every 4 hours. Go touch grass.",
@@ -19,6 +23,8 @@ const emptySubtexts = [
 export default function Home() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<LoadError | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [likedCount, setLikedCount] = useState(0);
   const [detailListing, setDetailListing] = useState<Listing | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -32,13 +38,24 @@ export default function Home() {
         setListings([...data].reverse());
         cardRefs.current = data.map(() => null);
       })
-      .catch(console.error)
+      .catch((err) => {
+        // Surfaced in the UI rather than swallowed: an unreachable database
+        // used to render as "you're all caught up".
+        console.error("Failed to load listings:", err);
+        setLoadError({
+          message: describeError(err),
+          isConfig: err instanceof ConfigError,
+        });
+      })
       .finally(() => setLoading(false));
 
-    // Get initial liked count
-    import("@/lib/liked").then(({ getLikedListings }) =>
-      getLikedListings().then((liked) => setLikedCount(liked.length))
-    );
+    // Get initial liked count. A failure here is already reported by the
+    // listings load above, so it only needs to not become an unhandled
+    // rejection.
+    import("@/lib/liked")
+      .then(({ getLikedListings }) => getLikedListings())
+      .then((liked) => setLikedCount(liked.length))
+      .catch((err) => console.error("Failed to load liked count:", err));
   }, []);
 
   const currentIndex = listings.length - 1;
@@ -47,20 +64,36 @@ export default function Home() {
     setListings((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
+  /**
+   * Reports a decision that could not be written. The card has already left
+   * the deck by this point, but nothing was persisted — so the cat reappears
+   * on the next load. Saying so beats losing the swipe silently.
+   */
+  const reportSaveFailure = useCallback((listing: Listing | undefined, err: unknown) => {
+    console.error("Decision failed:", err);
+    const name = listing?.title ?? "that cat";
+    setSaveError(`Couldn't save your swipe on "${name}" — it'll come back next time you load. ${describeError(err)}`);
+  }, []);
+
   const handleSwipe = useCallback(
     async (direction: string, id: string) => {
+      const listing = listings.find((l) => l.id === id);
       try {
         if (direction === "right") {
           await likeCat(id);
           setLikedCount((c) => c + 1);
         } else if (direction === "left") {
           await dismissCat(id);
+        } else {
+          return;
         }
+        // A write got through, so any banner from an earlier failure is stale.
+        setSaveError(null);
       } catch (err) {
-        console.error("Decision failed:", err);
+        reportSaveFailure(listing, err);
       }
     },
-    []
+    [listings, reportSaveFailure]
   );
 
   const handleCardLeftScreen = useCallback(
@@ -96,12 +129,13 @@ export default function Home() {
         } else {
           await dismissCat(detailListing.id);
         }
+        setSaveError(null);
       } catch (err) {
-        console.error("Decision failed:", err);
+        reportSaveFailure(detailListing, err);
       }
       removeListing(index);
     },
-    [detailListing, listings, removeListing]
+    [detailListing, listings, removeListing, reportSaveFailure]
   );
 
   if (loading) {
@@ -112,6 +146,8 @@ export default function Home() {
     );
   }
 
+  const showDeck = !loadError && listings.length > 0;
+
   return (
     <main className="flex h-dvh flex-col items-center bg-cream overflow-hidden">
       {/* Header */}
@@ -119,7 +155,7 @@ export default function Home() {
         <h1 className="font-display font-bold text-xl text-ink">🐾 Kitty Tinder</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-bark">
-            {listings.length > 0
+            {showDeck
               ? `${listings.length} cat${listings.length === 1 ? "" : "s"} to review`
               : ""}
           </span>
@@ -139,7 +175,9 @@ export default function Home() {
 
       {/* Card area */}
       <div className="relative mt-4 flex-1 min-h-0 w-full max-w-md px-4">
-        {listings.length === 0 ? (
+        {loadError ? (
+          <ErrorState message={loadError.message} isConfigError={loadError.isConfig} />
+        ) : listings.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <p className="text-[80px] leading-none">🐾</p>
             <p className="mt-4 font-display font-semibold text-xl text-ink">
@@ -200,8 +238,25 @@ export default function Home() {
         )}
       </div>
 
+      {/* Failed-write banner */}
+      {saveError && (
+        <div className="w-full max-w-md shrink-0 px-4 pt-2">
+          <div className="flex items-start gap-2 rounded-xl bg-blush px-3 py-2 text-left">
+            <span className="text-sm leading-5">⚠️</span>
+            <p className="flex-1 break-words text-xs leading-5 text-ink">{saveError}</p>
+            <button
+              onClick={() => setSaveError(null)}
+              aria-label="Dismiss"
+              className="shrink-0 text-sm text-bark"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Buttons */}
-      {listings.length > 0 && (
+      {showDeck && (
         <div className="flex gap-10 pb-6 pt-4 shrink-0">
           <button
             onClick={() => triggerSwipe("left")}

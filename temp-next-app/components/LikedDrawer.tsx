@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { getLikedListings } from "@/lib/liked";
 import { Listing } from "@/lib/listings";
+import { ConfigError, describeError } from "@/lib/errors";
 import LikedListItem from "./LikedListItem";
+import ErrorState from "./ErrorState";
 
 export default function LikedDrawer({
   open,
@@ -14,13 +16,21 @@ export default function LikedDrawer({
 }) {
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<{ message: string; isConfig: boolean } | null>(null);
 
   useEffect(() => {
     if (open) {
       setLoading(true);
+      setLoadError(null);
       getLikedListings()
         .then(setListings)
-        .catch(console.error)
+        .catch((err) => {
+          console.error("Failed to load liked listings:", err);
+          setLoadError({
+            message: describeError(err),
+            isConfig: err instanceof ConfigError,
+          });
+        })
         .finally(() => setLoading(false));
     }
   }, [open]);
@@ -54,6 +64,8 @@ export default function LikedDrawer({
         <div className="flex-1 overflow-y-auto px-4 pb-8 pt-2" style={{ maxHeight: "calc(100dvh - 60px)" }}>
           {loading ? (
             <p className="py-12 text-center text-bark">Loading...</p>
+          ) : loadError ? (
+            <ErrorState message={loadError.message} isConfigError={loadError.isConfig} compact />
           ) : listings.length === 0 ? (
             <p className="py-12 text-center text-bark">No cats saved yet</p>
           ) : (
