@@ -33,6 +33,11 @@ export async function openDeck(page: Page): Promise<void> {
   await expect(topCard(page)).toBeVisible();
 }
 
+/** The line under the wordmark: how many cats are new and left to review. */
+export function status(page: Page) {
+  return page.locator("header [aria-live]");
+}
+
 export function topTitle(page: Page) {
   return topCard(page).getByRole("heading");
 }

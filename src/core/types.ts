@@ -30,7 +30,6 @@ export interface Cat {
 
 export interface SavedCat extends Cat {
   likedAt: string;
-  note: string | null;
   /** No longer on its source site: sold, reserved or not seen recently (R-64). */
   gone: boolean;
 }

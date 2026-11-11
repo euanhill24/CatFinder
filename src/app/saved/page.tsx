@@ -20,8 +20,8 @@ async function Saved() {
 
 export default function SavedPage() {
   return (
-    <main className="min-h-dvh bg-shortlist">
-      <Suspense fallback={<p className="p-8 text-center text-sm text-bark">Loading saved cats…</p>}>
+    <main className="wash min-h-dvh">
+      <Suspense fallback={<p className="p-10 text-center text-sm font-semibold text-bark">Loading saved cats…</p>}>
         <Saved />
       </Suspense>
     </main>

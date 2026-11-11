@@ -2,66 +2,23 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { formatAge, formatAgo } from "@/core/format";
+import { formatAge, formatAgo, pluralCats } from "@/core/format";
 import type { SavedCat } from "@/core/types";
-import { decideAction, noteAction } from "@/server/actions";
+import { decideAction } from "@/server/actions";
 import { DetailView, closeDetail } from "./DetailView";
 import { Photo } from "./Photo";
 import { OfflineBanner } from "./States";
+import { ArrowOutIcon, BackIcon, HeartIcon } from "./icons";
 
-function GoneBadge() {
+function GoneBadge({ onPhoto = false }: { onPhoto?: boolean }) {
   return (
-    <span className="inline-block rounded-full bg-fog px-2 py-0.5 text-[11px] font-bold text-bark">No longer listed</span>
-  );
-}
-
-function NoteEditor({ cat, onSaved }: { cat: SavedCat; onSaved: (note: string | null) => void }) {
-  const [text, setText] = useState(cat.note ?? "");
-  const [state, setState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
-  const changed = text.trim() !== (cat.note ?? "");
-
-  async function save() {
-    setState("saving");
-    const result = await noteAction(cat.id, text).catch(() => ({ ok: false as const }));
-    if (result.ok) {
-      onSaved(text.trim() || null);
-      setState("saved");
-    } else {
-      setState("failed");
-    }
-  }
-
-  return (
-    <section aria-label="Your note" className="rounded-2xl bg-card p-4 shadow-card">
-      <label htmlFor="note" className="text-xs font-semibold text-bark">
-        Your note
-      </label>
-      <textarea
-        id="note"
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setState("idle");
-        }}
-        maxLength={2000}
-        rows={2}
-        placeholder="Messaged the seller, viewing Saturday…"
-        className="mt-1 w-full resize-none rounded-xl bg-cream px-3 py-2 text-base text-ink outline-none placeholder:text-dust focus:ring-2 focus:ring-rose/40"
-      />
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-xs text-bark" role="status">
-          {state === "saved" && !changed && "Saved"}
-          {state === "failed" && "Couldn't save. Try again."}
-        </span>
-        <button
-          onClick={save}
-          disabled={!changed || state === "saving"}
-          className="min-h-11 rounded-full bg-rose px-5 text-sm font-bold text-white disabled:opacity-40"
-        >
-          {state === "saving" ? "Saving…" : "Save note"}
-        </button>
-      </div>
-    </section>
+    <span
+      className={`inline-block rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide ${
+        onPhoto ? "bg-ink/75 text-card" : "bg-fog text-bark"
+      }`}
+    >
+      No longer listed
+    </span>
   );
 }
 
@@ -87,80 +44,95 @@ export function SavedScreen({ initial, now: nowIso }: { initial: SavedCat[]; now
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-shortlist">
+    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col">
       <header
-        className="sticky top-0 z-10 flex items-center gap-2 bg-shortlist/95 px-4 pb-3 backdrop-blur"
-        style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}
+        className="sticky top-0 z-10 flex items-center gap-3 bg-cream/75 px-5 pb-3 backdrop-blur-xl"
+        style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.875rem)" }}
       >
         <Link
           href="/"
           aria-label="Back to the deck"
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-lg text-ink shadow-dismiss"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-ink shadow-dismiss transition-transform duration-150 active:scale-90"
         >
-          ←
+          <BackIcon size={22} />
         </Link>
-        <h1 className="font-display text-[22px] font-bold text-ink">
-          Saved Cats <span className="text-rose">♥</span>
-        </h1>
+        <div>
+          <h1 className="font-display text-[26px] font-bold leading-none tracking-tight text-ink">Saved cats</h1>
+          <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-bark">
+            <HeartIcon size={12} className="text-rose" />
+            {cats.length === 0 ? "Your shortlist" : `${pluralCats(cats.length)} on your shortlist`}
+          </p>
+        </div>
       </header>
 
       <OfflineBanner />
       {error && (
-        <p role="alert" className="mx-4 mb-2 rounded-xl bg-blush px-3 py-2 text-xs leading-5 text-ink">
-          ⚠️ {error}
+        <p role="alert" className="mx-4 mb-3 rounded-2xl bg-ink px-4 py-3 text-xs font-semibold leading-5 text-card shadow-soft">
+          {error}
         </p>
       )}
 
       {cats.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center px-6 pb-20 text-center">
-          <p aria-hidden className="text-[64px] leading-none">
-            💛
-          </p>
-          <h2 className="mt-4 font-display text-xl font-semibold text-ink">No saved cats yet</h2>
-          <p className="mt-2 max-w-[260px] text-sm text-bark">Swipe right on a cat you like and it will wait for you here.</p>
+        <div className="flex flex-1 flex-col items-center justify-center px-7 pb-24 text-center" style={{ animation: "rise-in 400ms ease-out" }}>
+          <div className="flex h-28 w-28 items-center justify-center rounded-full bg-card text-rose shadow-soft" style={{ animation: "float 4s ease-in-out infinite" }}>
+            <HeartIcon size={52} />
+          </div>
+          <h2 className="mt-7 font-display text-2xl font-semibold text-ink">No saved cats yet</h2>
+          <p className="mt-2 max-w-[260px] text-[15px] leading-relaxed text-bark">Swipe right on a cat you like and it will wait for you here.</p>
         </div>
       ) : (
-        <ul className="flex flex-col gap-3 px-4 pb-8">
-          {cats.map((cat) => (
-            <li key={cat.id} className={`rounded-2xl bg-card p-3 shadow-card ${cat.gone ? "opacity-70" : ""}`}>
-              <button
-                onClick={() => {
-                  setConfirmRemove(false);
-                  setOpenId(cat.id);
-                }}
-                className="flex w-full gap-3 text-left"
+        <ul className="grid grid-cols-2 gap-3 px-4 pb-10 pt-1">
+          {cats.map((cat, i) => {
+            const title = cat.title ?? "Ragdoll cat";
+            return (
+              <li
+                key={cat.id}
+                className="relative aspect-[3/4.3] overflow-hidden rounded-[26px] bg-ink shadow-soft"
+                style={{ animation: `rise-in 360ms ease-out ${Math.min(i, 8) * 50}ms backwards` }}
               >
                 <Photo
                   src={cat.photoUrls[0]}
                   alt=""
-                  className={`h-20 w-20 shrink-0 rounded-xl text-[10px] ${cat.gone ? "grayscale" : ""}`}
+                  compact
+                  className={`absolute inset-0 h-full w-full ${cat.gone ? "opacity-70 grayscale" : ""}`}
                 />
-                <div className="min-w-0 flex-1">
-                  <h2 className="line-clamp-2 font-display text-base font-semibold leading-tight text-ink">
-                    {cat.title ?? "Ragdoll cat"}
-                  </h2>
-                  <p className="mt-0.5 truncate text-[13px] text-bark">
+                <div aria-hidden className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-ink/90 via-ink/50 to-transparent" />
+
+                <button
+                  onClick={() => {
+                    setConfirmRemove(false);
+                    setOpenId(cat.id);
+                  }}
+                  className="on-photo absolute inset-0 flex flex-col justify-end p-3.5 text-left text-white outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-rose/60"
+                >
+                  {cat.gone && (
+                    <span className="mb-1.5 [text-shadow:none]">
+                      <GoneBadge onPhoto />
+                    </span>
+                  )}
+                  <span className="line-clamp-2 font-display text-[17px] font-semibold leading-tight">{title}</span>
+                  <span className="mt-1 truncate text-xs font-semibold text-white/85">
                     {formatAge(cat.ageMonths)}
                     {cat.location && ` · ${cat.location}`}
-                  </p>
-                  <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-dust">
-                    <span className="font-bold text-rose">⭐ {cat.overall.toFixed(1)}</span>
-                    <span>Saved {formatAgo(cat.likedAt, now)}</span>
-                    {cat.gone && <GoneBadge />}
-                  </p>
-                </div>
-              </button>
-              {cat.note && <p className="mt-2 line-clamp-2 rounded-xl bg-cream px-3 py-2 text-[13px] text-ink">📝 {cat.note}</p>}
-              <a
-                href={cat.externalUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 flex min-h-11 items-center justify-center rounded-full bg-rose px-4 text-sm font-bold text-white"
-              >
-                View listing <span aria-hidden className="ml-1">↗</span>
-              </a>
-            </li>
-          ))}
+                  </span>
+                  <span className="mt-0.5 text-[11px] font-semibold text-white/65">Saved {formatAgo(cat.likedAt, now)}</span>
+                </button>
+
+                <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-ink/50 px-2.5 py-1 text-[11px] font-extrabold text-white backdrop-blur-md">
+                  {Math.round(cat.overall * 10)}% match
+                </span>
+                <a
+                  href={cat.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View listing"
+                  className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-card text-ink shadow-dismiss transition-transform duration-150 active:scale-90"
+                >
+                  <ArrowOutIcon size={20} />
+                </a>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -170,23 +142,19 @@ export function SavedScreen({ initial, now: nowIso }: { initial: SavedCat[]; now
           now={now}
           onClose={() => setOpenId(null)}
           badge={
-            <p className="flex flex-wrap items-center gap-2 text-xs text-bark">
-              <span>Saved {formatAgo(open.likedAt, now)}</span>
+            <p className="flex flex-wrap items-center gap-2 text-xs font-semibold text-bark">
+              <span className="inline-flex items-center gap-1">
+                <HeartIcon size={12} className="text-rose" />
+                Saved {formatAgo(open.likedAt, now)}
+              </span>
               {open.gone && <GoneBadge />}
             </p>
-          }
-          extra={
-            <NoteEditor
-              key={open.id}
-              cat={open}
-              onSaved={(note) => setCats((current) => current.map((c) => (c.id === open.id ? { ...c, note } : c)))}
-            />
           }
           actions={
             <button
               onClick={() => (confirmRemove ? remove(open) : setConfirmRemove(true))}
-              className={`min-h-12 w-full rounded-full px-5 text-[15px] font-bold ${
-                confirmRemove ? "bg-ink text-card" : "bg-card text-bark shadow-dismiss"
+              className={`min-h-[52px] w-full rounded-full px-5 text-[15px] font-extrabold transition-colors ${
+                confirmRemove ? "bg-rose text-white shadow-like" : "bg-card text-bark shadow-soft"
               }`}
             >
               {confirmRemove ? "Tap again to remove" : "Remove from saved"}

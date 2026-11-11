@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { closeDb, decisionOf, openDeck, resetData, testDb, topCard, topTitle, touchSwipe } from "./helpers";
+import { closeDb, decisionOf, openDeck, resetData, status, testDb, topCard, topTitle, touchSwipe } from "./helpers";
 
 test.beforeEach(resetData);
 test.afterAll(closeDb);
@@ -7,7 +7,7 @@ test.afterAll(closeDb);
 test("shows the best match first with counts @layout", async ({ page }) => {
   await openDeck(page);
   await expect(topTitle(page)).toHaveText(/Bella/);
-  await expect(page.getByText(/to review/)).toContainText("7 new · 7 cats to review");
+  await expect(status(page)).toContainText("7 new 7 cats to review");
   await expect(page.getByRole("link", { name: "Saved cats (2)" })).toBeVisible();
 
   // Nothing overflows sideways, and the buttons are on screen.
@@ -21,7 +21,7 @@ test("swiping right saves the cat and shows the next one", async ({ page }) => {
   await openDeck(page);
   await touchSwipe(page, "right");
   await expect(topTitle(page)).toHaveText(/Bonded pair/);
-  await expect(page.getByText(/to review/)).toContainText("6 new · 6 cats to review");
+  await expect(status(page)).toContainText("6 new 6 cats to review");
   await expect(page.getByRole("link", { name: "Saved cats (3)" })).toBeVisible();
   await expect.poll(() => decisionOf("bella")).toBe("liked");
 });
@@ -34,7 +34,7 @@ test("swiping left dismisses the cat for good", async ({ page }) => {
 
   await page.reload();
   await expect(topTitle(page)).toHaveText(/Bonded pair/);
-  await expect(page.getByText(/to review/)).toContainText("6 cats to review");
+  await expect(status(page)).toContainText("6 cats to review");
 });
 
 test("a short drag is not a decision", async ({ page }) => {
@@ -93,7 +93,7 @@ test("undo brings the last cat back", async ({ page }) => {
   await expect.poll(() => decisionOf("bella")).toBe("dismissed");
   await undo.tap();
   await expect(topTitle(page)).toHaveText(/Bella/);
-  await expect(page.getByText(/to review/)).toContainText("7 cats to review");
+  await expect(status(page)).toContainText("7 cats to review");
   await expect.poll(() => decisionOf("bella")).toBeNull();
 });
 
@@ -122,13 +122,13 @@ test("loads more cards as she goes, and ends caught up", async ({ page }) => {
            '{"alone":"a","friendly":"f","vibe":"v","distance":"d","age":"g"}'::jsonb
     from generate_series(1, 30) n`);
   await openDeck(page);
-  await expect(page.getByText(/to review/)).toContainText("37 cats to review");
+  await expect(status(page)).toContainText("37 cats to review");
   // Only a few cards are in the page at once.
   expect(await page.locator("article").count()).toBeLessThanOrEqual(2);
 
   const dismiss = page.getByRole("button", { name: "Dismiss", exact: true });
   for (let i = 37; i > 0; i--) {
-    await expect(page.getByText(/to review/)).toContainText(`${i} cat${i === 1 ? "" : "s"} to review`);
+    await expect(status(page)).toContainText(`${i} cat${i === 1 ? "" : "s"} to review`);
     await dismiss.tap();
   }
   await expect(page.getByText("You're all caught up!")).toBeVisible();
@@ -142,10 +142,10 @@ test("counts only cats new since the last visit", async ({ context, page }) => {
   await context.addCookies([{ name: "kt_seen", value: String(sixHoursAgo), url: "http://localhost:3210" }]);
   await openDeck(page);
   // Bella, the red-flag advert and the no-photo advert arrived in the last 6 hours.
-  await expect(page.getByText(/to review/)).toContainText("3 new · 7 cats to review");
+  await expect(status(page)).toContainText("3 new 7 cats to review");
   // Still the same visit after a reload.
   await page.reload();
-  await expect(page.getByText(/to review/)).toContainText("3 new · 7 cats to review");
+  await expect(status(page)).toContainText("3 new 7 cats to review");
 });
 
 test("shows the real reason when cats cannot be loaded, never an empty deck", async ({ page }) => {

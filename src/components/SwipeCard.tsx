@@ -16,6 +16,8 @@ interface Props {
   label: string;
   /** Stamp shown while dragging right, e.g. "Love her!". */
   likeText: string;
+  /** Reports how far the card has been pulled, from -1 (left) to 1 (right). */
+  onPull?: (pull: number) => void;
   children: ReactNode;
 }
 
@@ -35,7 +37,7 @@ const EXIT_MS = 260;
  * Tap and swipe are told apart by distance moved, using pointer events only,
  * so one touch can never be read as both.
  */
-export function SwipeCard({ ref, onSwiped, onTap, label, likeText, children }: Props) {
+export function SwipeCard({ ref, onSwiped, onTap, label, likeText, onPull, children }: Props) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [leaving, setLeaving] = useState<SwipeDirection | null>(null);
@@ -48,10 +50,11 @@ export function SwipeCard({ ref, onSwiped, onTap, label, likeText, children }: P
       done.current = true;
       setDragging(false);
       setLeaving(direction);
+      onPull?.(direction === "right" ? 1 : -1);
       // Not transitionend: it does not fire if the tab is hidden mid-animation.
       window.setTimeout(() => onSwiped(direction), EXIT_MS);
     },
-    [onSwiped],
+    [onSwiped, onPull],
   );
 
   useImperativeHandle(ref, () => ({ fling }), [fling]);
@@ -71,6 +74,7 @@ export function SwipeCard({ ref, onSwiped, onTap, label, likeText, children }: P
     if (!s.moved && Math.hypot(dx, dy) < TAP_SLOP) return;
     s.moved = true;
     setOffset({ x: dx, y: dy * 0.25 });
+    onPull?.(Math.max(-1, Math.min(1, dx / SWIPE_DISTANCE)));
   }
 
   function onPointerEnd(e: React.PointerEvent<HTMLDivElement>, cancelled: boolean) {
@@ -84,6 +88,7 @@ export function SwipeCard({ ref, onSwiped, onTap, label, likeText, children }: P
 
     if (cancelled) {
       setOffset({ x: 0, y: 0 });
+      onPull?.(0);
       return;
     }
     if (!s.moved) {
@@ -95,6 +100,7 @@ export function SwipeCard({ ref, onSwiped, onTap, label, likeText, children }: P
       fling(dx > 0 ? "right" : "left");
     } else {
       setOffset({ x: 0, y: 0 });
+      onPull?.(0);
     }
   }
 
@@ -117,10 +123,11 @@ export function SwipeCard({ ref, onSwiped, onTap, label, likeText, children }: P
         } else if (e.key === "ArrowRight") fling("right");
         else if (e.key === "ArrowLeft") fling("left");
       }}
-      className="absolute inset-0 cursor-grab touch-none select-none outline-none active:cursor-grabbing"
+      className="absolute inset-0 cursor-grab touch-none select-none rounded-card outline-none focus-visible:ring-4 focus-visible:ring-rose/50 active:cursor-grabbing"
       style={{
-        transform: `translate3d(${x}px, ${leaving ? 0 : offset.y}px, 0) rotate(${x * 0.05}deg)`,
+        transform: `translate3d(${x}px, ${leaving ? 0 : offset.y}px, 0) rotate(${x * 0.045}deg)`,
         transition: dragging ? "none" : `transform ${leaving ? EXIT_MS : 220}ms ease-out`,
+        transformOrigin: "50% 120%",
         willChange: "transform",
       }}
     >
@@ -130,17 +137,27 @@ export function SwipeCard({ ref, onSwiped, onTap, label, likeText, children }: P
           Each stamp sits on the trailing side, which is the part still on screen. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 flex items-start justify-start rounded-card bg-rose/45 pl-6 pt-[22%]"
-        style={{ opacity: Math.max(0, pull) }}
+        className="pointer-events-none absolute inset-0 rounded-card"
+        style={{ opacity: Math.max(0, pull), background: "linear-gradient(160deg, rgba(232,93,117,0.75), rgba(244,162,97,0.45))" }}
       >
-        <span className="-rotate-6 font-display text-3xl font-bold text-white drop-shadow-md">💛 {likeText}</span>
+        <span
+          className="absolute left-6 top-[18%] rounded-2xl border-[3px] border-white px-4 py-1.5 font-display text-[30px] font-bold leading-tight text-white"
+          style={{ transform: `rotate(-12deg) scale(${0.8 + 0.2 * Math.max(0, pull)})` }}
+        >
+          {likeText}
+        </span>
       </div>
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 flex items-start justify-end rounded-card bg-fog/75 pr-6 pt-[22%]"
+        className="pointer-events-none absolute inset-0 rounded-card bg-ink/55"
         style={{ opacity: Math.max(0, -pull) }}
       >
-        <span className="rotate-6 text-2xl font-bold text-bark">Not this time →</span>
+        <span
+          className="absolute right-6 top-[18%] rounded-2xl border-[3px] border-white/90 px-4 py-1.5 font-display text-[26px] font-bold leading-tight text-white/95"
+          style={{ transform: `rotate(10deg) scale(${0.8 + 0.2 * Math.max(0, -pull)})` }}
+        >
+          Not this time
+        </span>
       </div>
     </div>
   );

@@ -1,11 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1100">
-<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EDE8E3"/><stop offset="1" stop-color="#C4A89C"/></linearGradient></defs>
-<rect width="900" height="1100" fill="url(#g)"/>
-<g fill="#FFFBF5" opacity="0.92" transform="translate(450 560)">
-<path d="M-190 -150 L-150 -330 L-40 -210 Z"/><path d="M190 -150 L150 -330 L40 -210 Z"/>
-<ellipse rx="230" ry="200"/>
-<ellipse cx="-85" cy="-30" rx="26" ry="34" fill="#2D1B12"/><ellipse cx="85" cy="-30" rx="26" ry="34" fill="#2D1B12"/>
-<path d="M-18 40 L18 40 L0 62 Z" fill="#E85D75"/>
-</g>
-<text x="450" y="1010" text-anchor="middle" font-family="Georgia, serif" font-size="44" fill="#FFFBF5" opacity="0.9">Sample photo 4</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#E8E0D2"/><stop offset="1" stop-color="#C3A98C"/></linearGradient>
+<radialGradient id="glow" cx="0.5" cy="0.38" r="0.55"><stop offset="0" stop-color="#fff" stop-opacity="0.55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<radialGradient id="mask" cx="0.5" cy="0.62" r="0.55"><stop offset="0" stop-color="#8A6F5E" stop-opacity="0.85"/><stop offset="0.7" stop-color="#8A6F5E" stop-opacity="0.25"/><stop offset="1" stop-color="#8A6F5E" stop-opacity="0"/></radialGradient>
+<radialGradient id="eye" cx="0.5" cy="0.4" r="0.6"><stop offset="0" stop-color="#9FD3F5"/><stop offset="1" stop-color="#3F86C6"/></radialGradient>
+</defs>
+<rect width="900" height="1200" fill="url(#bg)"/>
+<rect width="900" height="1200" fill="url(#glow)"/>
+<circle cx="120" cy="170" r="150" fill="#fff" opacity="0.14"/><circle cx="800" cy="980" r="220" fill="#fff" opacity="0.10"/>
+<!-- body -->
+<path d="M150 1200 C150 900 290 800 450 800 C610 800 750 900 750 1200 Z" fill="#FCF8F1"/>
+<path d="M330 1200 C330 1010 380 930 450 930 C520 930 570 1010 570 1200 Z" fill="#fff" opacity="0.7"/>
+<!-- ears -->
+<path d="M232 470 L262 230 L410 380 Z" fill="#8A6F5E"/><path d="M668 470 L638 230 L490 380 Z" fill="#8A6F5E"/>
+<path d="M270 420 L282 290 L366 376 Z" fill="#F3B8B5"/><path d="M630 420 L618 290 L534 376 Z" fill="#F3B8B5"/>
+<!-- head -->
+<ellipse cx="450" cy="590" rx="262" ry="232" fill="#FCF8F1"/>
+<ellipse cx="450" cy="610" rx="200" ry="180" fill="url(#mask)"/>
+<path d="M450 420 C420 520 410 640 450 720 C490 640 480 520 450 420 Z" fill="#fff" opacity="0.9"/>
+<ellipse cx="450" cy="700" rx="92" ry="66" fill="#fff"/>
+<!-- cheeks fluff -->
+<path d="M196 620 L150 660 L206 668 L160 720 L226 712 Z" fill="#FCF8F1"/><path d="M704 620 L750 660 L694 668 L740 720 L674 712 Z" fill="#FCF8F1"/>
+<!-- eyes -->
+<ellipse cx="352" cy="572" rx="46" ry="42" fill="url(#eye)"/><ellipse cx="548" cy="572" rx="46" ry="42" fill="url(#eye)"/>
+<ellipse cx="352" cy="574" rx="15" ry="30" fill="#1E1A1A"/><ellipse cx="548" cy="574" rx="15" ry="30" fill="#1E1A1A"/>
+<circle cx="366" cy="556" r="9" fill="#fff"/><circle cx="562" cy="556" r="9" fill="#fff"/>
+<!-- nose, mouth, whiskers -->
+<path d="M428 668 L472 668 L450 694 Z" fill="#E98A93"/>
+<path d="M450 694 C450 722 420 730 404 716 M450 694 C450 722 480 730 496 716" fill="none" stroke="#8A5F5A" stroke-width="5" stroke-linecap="round"/>
+<g stroke="#fff" stroke-width="4" stroke-linecap="round" opacity="0.9"><path d="M372 700 L210 680"/><path d="M372 716 L216 740"/><path d="M528 700 L690 680"/><path d="M528 716 L684 740"/></g>
 </svg>

@@ -27,7 +27,6 @@ interface CatRow {
 
 interface SavedRow extends CatRow {
   decided_at: Date;
-  note: string | null;
   gone: boolean;
 }
 
@@ -120,7 +119,7 @@ export async function getDeck(db: Db, opts: DeckOptions = {}): Promise<Deck> {
 /** Liked cats, most recently liked first. Gone cats stay, flagged (R-64, R-71). */
 export async function getSaved(db: Db, now: Date = new Date()): Promise<SavedCat[]> {
   const rows = await db.query<SavedRow>(
-    `select ${CAT_COLUMNS}, l.decided_at, l.note,
+    `select ${CAT_COLUMNS}, l.decided_at,
             (l.source_status <> 'listed' or l.last_seen_at < $1) as gone
      from listings l
      where l.decision = 'liked'
@@ -130,7 +129,6 @@ export async function getSaved(db: Db, now: Date = new Date()): Promise<SavedCat
   return rows.map((r) => ({
     ...toCat(r),
     likedAt: r.decided_at.toISOString(),
-    note: r.note,
     gone: r.gone,
   }));
 }
@@ -155,12 +153,6 @@ export function decide(db: Db, id: string, decision: Decision, now: Date = new D
 /** Puts a cat back in the deck (R-48). */
 export function undoDecision(db: Db, id: string): Promise<void> {
   return updateOne(db, "update listings set decision = null, decided_at = null where id = $1", [id]);
-}
-
-/** Sets or clears her private note on a cat (R-75). */
-export function setNote(db: Db, id: string, note: string | null): Promise<void> {
-  const trimmed = note?.trim() || null;
-  return updateOne(db, "update listings set note = $2 where id = $1", [id, trimmed]);
 }
 
 export async function getCollectionStatus(db: Db, now: Date = new Date()): Promise<CollectionStatus> {

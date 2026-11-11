@@ -8,9 +8,9 @@ Plan for building the product described in `PRD-v2.md`. Requirement IDs (`R-xx`,
 |---|---|
 | Relationship to v1 code | **Fully clean slate.** Nothing is carried over. v1 code is deleted on the v2 branch. |
 | Existing data | **Start fresh.** No listings or decisions are migrated. |
-| Scope | **Everything** in PRD-v2: Must, Should and Could. |
+| Scope | **Everything** in PRD-v2: Must, Should and Could. Private notes were later dropped. |
 | Stack | **Option A** from §2: Next.js on Vercel, Supabase, GitHub Actions, with server-side data access only. |
-| Database | Postgres, reached over a plain connection string (`DATABASE_URL`). A new Supabase project was the choice, but the free plan's two-project limit is already used, so where it is hosted is **open again**. |
+| Database | The **existing CatFinder Supabase project**, with v1's table replaced by the v2 schema. v1 is no longer in use, so nothing is preserved. Reached over a plain Postgres connection string (`DATABASE_URL`). |
 | Branch | `v2` |
 | Password on the app URL | **No.** The URL is unlisted and kept out of search engines, but not password protected. |
 
@@ -51,9 +51,9 @@ Other choices under option A:
 - Build on a new branch, proposed name **`v2`**, created from `main`. This plan and `PRD-v2.md` move with it.
 - `main` and the live v1 app stay untouched until cut-over. The v1 scheduled run keeps working.
 - v2 gets its **own Vercel project** pointing at the `v2` branch, so she can test on a real URL without disturbing v1.
-- v2 gets **new database tables** (decision D2 below: same Supabase project or a new one).
+- v2 **replaces v1's table** in the existing Supabase project. From that point the v1 app and its scheduled run stop working, which is accepted because v1 is not in use.
 - GitHub only runs scheduled workflows from the default branch. Until cut-over, the collector is run by hand; the 4-hourly schedule starts when `v2` merges to `main`.
-- Cut-over: merge `v2` to `main`, point the main URL at the v2 project, confirm one scheduled run succeeds, then remove v1's table and Vercel project. Removing v1's data is a separate step that needs your go-ahead.
+- Cut-over: merge `v2` to `main`, point the main URL at the v2 project, confirm one scheduled run succeeds, then remove v1's Vercel project.
 
 ## 4. Repository shape
 
@@ -75,7 +75,7 @@ Data: `listings`, `collection_runs`, and the fields in PRD §8. Row-level securi
 
 ## 5. Milestones
 
-**Progress:** milestones 1–5 done, plus the stale-collection banner from milestone 12. Next: milestone 6 (deploy), which is waiting on where the database is hosted.
+**Progress:** milestones 1–5 done, plus the stale-collection banner from milestone 12 and a full visual redesign (see `DESIGN.md`). Next: replace the database, then milestone 6 (deploy).
 
 Each milestone ends with something that can be checked. UI comes first, on sample data, so the feel can be tested on her phone before any scraping exists.
 
@@ -87,7 +87,7 @@ Each milestone ends with something that can be checked. UI comes first, on sampl
 | 2 | **Data layer.** Schema migrations, server data access, sample data covering awkward cases (sold, too young, no photo, very long description, duplicate pair) | PRD §8, R-30–R-34 | Tests show the deck query returns the right cats in the right order |
 | 3 | **Shell and status.** Installable app, header, loading, error, empty and offline states, "last checked" time | R-80, R-81, R-90, R-91 | With the database unreachable the app shows the real error, never "all caught up" |
 | 4 | **Swipe deck.** Card, drag with tilt and overlay, buttons, tap to open, saved decisions, failed-save message, new-since-last-visit count, undo | R-40–R-49 | Browser tests pass at 360px and 390px; swipe and tap both work on touch emulation |
-| 5 | **Detail view and saved list.** Gallery, description, scores with reasons, original advert link, saved list with status badge, remove, notes | R-50–R-56, R-70–R-75 | Like → appears in saved list; gone cats are badged, not hidden |
+| 5 | **Detail view and saved list.** Gallery, description, scores with reasons, original advert link, saved list with status badge, remove | R-50–R-56, R-70–R-74 | Like → appears in saved list; gone cats are badged, not hidden |
 | 6 | **Deploy and phone test.** v2 Vercel project, no search indexing | N-01, N-02, N-06 | She tries it on her phone with sample cats. Feedback is fixed before Phase 2 |
 
 ### Phase 2 — Real cats

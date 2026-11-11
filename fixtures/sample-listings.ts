@@ -28,7 +28,6 @@ export interface SampleListing {
   reasons: ScoreReasons | null;
   decision?: Decision;
   decidedHoursAgo?: number;
-  note?: string;
 }
 
 const LONG_DESCRIPTION = `Bella is a stunning blue bicolour ragdoll who has been with us since she was a kitten. Sadly we are relocating abroad for work and cannot take her with us, which is breaking our hearts.
@@ -331,7 +330,6 @@ export const SAMPLE_LISTINGS: SampleListing[] = [
     ),
     decision: "liked",
     decidedHoursAgo: 20,
-    note: "Messaged the seller, viewing Saturday.",
   },
   {
     key: "liked-gone",
@@ -385,12 +383,12 @@ export async function loadSampleListings(db: Db, now: Date = new Date()): Promis
          source, external_url, title, price_pence, age_months, sex, location_raw, description,
          photo_urls, listed_at, first_seen_at, last_seen_at, source_status, is_ragdoll,
          score_alone, score_friendly, score_vibe, score_distance, score_age, score_overall,
-         score_reasons, scored_at, decision, decided_at, note
+         score_reasons, scored_at, decision, decided_at
        ) values (
          $1, $2, $3, $4, $5, $6, $7, $8,
          array(select jsonb_array_elements_text($9::text::jsonb)), $10, $11, $12, $13, $14,
          $15, $16, $17, $18, $19, $20,
-         $21::text::jsonb, $22, $23, $24, $25
+         $21::text::jsonb, $22, $23, $24
        )
        on conflict (external_url) do nothing`,
       [
@@ -418,7 +416,6 @@ export async function loadSampleListings(db: Db, now: Date = new Date()): Promis
         s.scores ? ago(s.firstSeenHoursAgo) : null,
         s.decision ?? null,
         s.decidedHoursAgo == null ? null : ago(s.decidedHoursAgo),
-        s.note ?? null,
       ],
     );
   }

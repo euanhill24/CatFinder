@@ -8,7 +8,6 @@ import {
   getCollectionStatus,
   getDeck,
   getSaved,
-  setNote,
   undoDecision,
 } from "@/server/listings";
 
@@ -164,14 +163,6 @@ describe("saved list", () => {
   it("flags a saved cat as gone when its advert is marked sold", async () => {
     await db.query("update listings set source_status = 'sold' where external_url = $1", [sampleUrl("liked-live")]);
     expect((await getSaved(db, NOW))[0].gone).toBe(true);
-  });
-
-  it("stores, trims and clears a note", async () => {
-    const id = await idOf("liked-gone");
-    await setNote(db, id, "  Called, no answer  ");
-    expect((await getSaved(db, NOW))[1].note).toBe("Called, no answer");
-    await setNote(db, id, "   ");
-    expect((await getSaved(db, NOW))[1].note).toBeNull();
   });
 });
 

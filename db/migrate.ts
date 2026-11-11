@@ -6,8 +6,10 @@ const MIGRATIONS_DIR = join(process.cwd(), "db", "migrations");
 
 /** Applies any migration files not yet recorded, in filename order. */
 export async function migrate(db: Db, dir: string = MIGRATIONS_DIR): Promise<string[]> {
+  // Row-level security with no policies keeps the table out of Supabase's public API.
   await db.exec(
-    "create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())",
+    "create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now());" +
+      "alter table schema_migrations enable row level security;",
   );
   const done = new Set((await db.query<{ name: string }>("select name from schema_migrations")).map((r) => r.name));
   const pending = readdirSync(dir)

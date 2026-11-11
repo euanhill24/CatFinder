@@ -42,7 +42,6 @@ create table listings (
   -- Her decision (R-45). Never touched by collection (R-11).
   decision        text check (decision in ('liked', 'dismissed')),
   decided_at      timestamptz,
-  note            text,
 
   check ((decision is null) = (decided_at is null)),
   check (duplicate_of is null or duplicate_of <> id)

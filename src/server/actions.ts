@@ -3,7 +3,7 @@
 import { describeProblem } from "@/core/errors";
 import type { Cat, Decision } from "@/core/types";
 import { getDb } from "./db";
-import { decide, getDeck, setNote, undoDecision } from "./listings";
+import { decide, getDeck, undoDecision } from "./listings";
 import { DECK_PAGE_SIZE } from "./load";
 
 /**
@@ -40,14 +40,6 @@ export async function decideAction(id: string, decision: Decision): Promise<Acti
 export async function undoAction(id: string): Promise<ActionResult> {
   return run("Undoing a decision", async () => {
     await undoDecision(getDb(), checkId(id));
-    return {};
-  });
-}
-
-export async function noteAction(id: string, note: string): Promise<ActionResult> {
-  return run("Saving a note", async () => {
-    if (typeof note !== "string" || note.length > 2000) throw new Error("Note is too long");
-    await setNote(getDb(), checkId(id), note);
     return {};
   });
 }

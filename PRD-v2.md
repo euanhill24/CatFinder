@@ -195,7 +195,7 @@ Each listing is scored once, when it first arrives, on five criteria from 0 to 1
 | ID | Requirement | Priority |
 |---|---|---|
 | R-40 | One card at a time, filling most of a 390px-wide phone screen, with the next card visible behind it. | Must |
-| R-41 | Card face shows: primary photo, title/name, age, sex, location, the alone-friendly, friendly, vibe and overall scores as bars, source site, and how long ago it was listed. | Must |
+| R-41 | Card face shows: primary photo, title/name, age, sex, location, the alone-friendly, friendly and vibe scores as bars, the overall match as a single percentage, source site, and how long ago it was listed. | Must |
 | R-42 | Swipe right = like, swipe left = dismiss. The card tilts and shows a "like" or "nope" overlay as it's dragged, so the result is clear before she lets go. | Must |
 | R-43 | Large tap buttons (✕ and ♥) do the same thing, for one-handed use. | Must |
 | R-44 | Tapping the card opens the detail view. Tap must work reliably on mobile touch screens and must not be mistaken for the start of a swipe, or the reverse. | Must |
@@ -238,7 +238,6 @@ Neither source marks an advert as sold in a reliable, machine-readable way. A so
 | R-72 | Each entry shows: thumbnail, title/name, age, location, overall score, date liked, still-listed status, and a direct link to the original advert. | Must |
 | R-73 | Tapping an entry opens the same detail view as the deck. | Should |
 | R-74 | A cat can be removed from the saved list (for example after viewing it or hearing it's gone). Removing it counts as dismissing it. | Should |
-| R-75 | She can add a short private note to a saved cat ("messaged 12 Nov, viewing Sat"). | Could |
 
 ### 5.9 Status and trust (O4)
 
@@ -282,7 +281,7 @@ The visual direction from `DESIGN.md` stands: **"a cosy cat café that has an ap
 
 - Microcopy has personality, because she'll read it hundreds of times. The empty state rotates through a few variations.
 - The swipe overlay ("Love her!" / "Not this time") is the most enjoyable moment in the product and deserves polish.
-- Scores appear as bars, not numbers, on the card face. Numbers can appear in the detail view.
+- On the card face the overall match is the only number; the other scores are bars. Numbers can appear in the detail view.
 - Never say "AI", "algorithm", "model" or "generated" anywhere in the interface.
 
 ---
@@ -291,7 +290,7 @@ The visual direction from `DESIGN.md` stands: **"a cosy cat café that has an ap
 
 These are the facts the product must store, not a schema.
 
-**Per listing:** source; original URL (unique); title; price; age (months); sex; location as written; description; photo URLs; date listed; date first collected; date last seen; five sub-scores, overall score and five reasons; inclusion status (shown / hidden-too-young / hidden-not-ragdoll); duplicate-of reference (if R-12 is built); decision (none / liked / dismissed); date decided; note (if R-75 is built).
+**Per listing:** source; original URL (unique); title; price; age (months); sex; location as written; description; photo URLs; date listed; date first collected; date last seen; five sub-scores, overall score and five reasons; inclusion status (shown / hidden-too-young / hidden-not-ragdoll); duplicate-of reference (if R-12 is built); decision (none / liked / dismissed); date decided.
 
 **Per collection run:** started at, finished at, per-source counts (seen / new / scored / failed), overall status, error summary.
 
@@ -387,7 +386,7 @@ Build the UI first, so the swipe experience can be tested on her phone before co
 
 **Phase 3 — Polish (Should/Could)**
 
-12. Cross-source duplicate detection (R-12), undo (R-48), notes (R-75), red flags (R-27)
+12. Cross-source duplicate detection (R-12), undo (R-48), red flags (R-27)
 
 ---
 
@@ -396,6 +395,7 @@ Build the UI first, so the swipe experience can be tested on her phone before co
 - More sources: Preloved, Facebook Marketplace, breed rescues and breeders' own sites
 - Push notifications for exceptional matches (for example, overall score ≥ 8.5 within 50 miles)
 - Filtering or sorting controls
+- Private notes on saved cats
 - Sharing a cat with a friend or family member
 - Re-scoring existing listings when the weights change
 
