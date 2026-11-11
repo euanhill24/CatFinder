@@ -12,7 +12,7 @@ This PRD describes **what the product must do for its user**, not how to build i
 - **Lessons from v1** (§11) record things the first version got wrong in production. Every one of them is a requirement in this document. They are listed separately so nobody has to rediscover them.
 - **Technical constraints** (§10) are limited to facts about the outside world (source sites, budget, hosting) that any implementation has to deal with. Technology choices are deliberately left open.
 
-`PRD.md` (v1.1), `ARCHITECTURE.md` and `DESIGN.md` describe the v1 build. Where they disagree with this document, this document wins. `DESIGN.md` remains the visual reference unless replaced.
+The v1 documents (`PRD.md` v1.1 and `ARCHITECTURE.md`) are on `main` and in git history only. `DESIGN.md` remains the visual reference unless replaced.
 
 ---
 
@@ -268,7 +268,7 @@ Neither source marks an advert as sold in a reliable, machine-readable way. A so
 | N-03 | **Accessibility:** tap targets at least 44px. Swipe actions always have button equivalents. Text contrast meets WCAG AA. |
 | N-04 | **Running cost:** under £5/month in total, with a hard spending cap on any paid API. |
 | N-05 | **Unattended operation:** runs for months with no manual work. Transient network failures are retried. Permanent failures are reported clearly in the run summary, not retried forever. |
-| N-06 | **Privacy:** no analytics or third-party tracking. The URL is not indexed by search engines. Optional password protection at the hosting layer. |
+| N-06 | **Privacy:** no analytics or third-party tracking. The URL is not indexed by search engines. No password: she opens it straight from her home screen. |
 | N-07 | **Secrets:** keys that allow writes or cost money must never reach the browser. |
 | N-08 | **Recoverability:** if scoring fails after collection succeeds, the run can be retried without re-collecting. |
 | N-09 | **Setup:** a new developer can go from clone to a running app with sample data by following one README section. All required configuration is listed in one place, and missing configuration produces an error naming the missing values. |

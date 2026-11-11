@@ -9,7 +9,10 @@ Plan for building the product described in `PRD-v2.md`. Requirement IDs (`R-xx`,
 | Relationship to v1 code | **Fully clean slate.** Nothing is carried over. v1 code is deleted on the v2 branch. |
 | Existing data | **Start fresh.** No listings or decisions are migrated. |
 | Scope | **Everything** in PRD-v2: Must, Should and Could. |
-| Stack | Open. Options and a recommendation are in §2. |
+| Stack | **Option A** from §2: Next.js on Vercel, Supabase, GitHub Actions, with server-side data access only. |
+| Database | A **new Supabase project**, so v1 is untouched until cut-over. |
+| Branch | `v2` |
+| Password on the app URL | **No.** The URL is unlisted and kept out of search engines, but not password protected. |
 
 Consequence of starting fresh: any cat she has already swiped on that is still listed will appear once more in v2.
 
@@ -72,6 +75,8 @@ Data: `listings`, `collection_runs`, and the fields in PRD §8. Row-level securi
 
 ## 5. Milestones
 
+**Progress:** milestone 1 done. Next: milestone 2.
+
 Each milestone ends with something that can be checked. UI comes first, on sample data, so the feel can be tested on her phone before any scraping exists.
 
 ### Phase 1 — Usable app on sample data
@@ -83,7 +88,7 @@ Each milestone ends with something that can be checked. UI comes first, on sampl
 | 3 | **Shell and status.** Installable app, header, loading, error, empty and offline states, "last checked" time | R-80, R-81, R-90, R-91 | With the database unreachable the app shows the real error, never "all caught up" |
 | 4 | **Swipe deck.** Card, drag with tilt and overlay, buttons, tap to open, saved decisions, failed-save message, new-since-last-visit count, undo | R-40–R-49 | Browser tests pass at 360px and 390px; swipe and tap both work on touch emulation |
 | 5 | **Detail view and saved list.** Gallery, description, scores with reasons, original advert link, saved list with status badge, remove, notes | R-50–R-56, R-70–R-75 | Like → appears in saved list; gone cats are badged, not hidden |
-| 6 | **Deploy and phone test.** v2 Vercel project, password protection, no search indexing | N-01, N-02, N-06 | She tries it on her phone with sample cats. Feedback is fixed before Phase 2 |
+| 6 | **Deploy and phone test.** v2 Vercel project, no search indexing | N-01, N-02, N-06 | She tries it on her phone with sample cats. Feedback is fixed before Phase 2 |
 
 ### Phase 2 — Real cats
 
@@ -114,15 +119,6 @@ Each milestone ends with something that can be checked. UI comes first, on sampl
 | Scoring cost | Small model, one call per new listing, hard spending cap (N-04) |
 
 ## 7. What I need from you
-
-**Decisions**
-
-| # | Decision | Default if you don't mind |
-|---|---|---|
-| D1 | Stack: A, B or C from §2 | A |
-| D2 | Database: new tables in the existing Supabase project, or a brand-new project | New project, so v1 is untouched until cut-over |
-| D3 | Branch name | `v2` |
-| D4 | Password on the app URL | Yes |
 
 **Things only you can do**
 

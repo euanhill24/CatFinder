@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Palette and type from DESIGN.md. Nothing is pure black, pure white or cold grey. */
+@theme inline {
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-nunito);
+
+  --color-cream: #fdf6ee;
+  --color-card: #fffbf5;
+  --color-ink: #2d1b12;
+  --color-bark: #9b7a6e;
+  --color-dust: #c4a89c;
+  --color-rose: #e85d75;
+  --color-tangerine: #f4a261;
+  --color-blush: #fde8ed;
+  --color-fog: #ede8e3;
+  --color-dismiss: #8c8c8c;
+  --color-shortlist: #fff8f5;
+
+  --radius-card: 28px;
+  --shadow-card: 0 8px 32px rgba(100, 40, 20, 0.1), 0 2px 8px rgba(100, 40, 20, 0.06);
+  --shadow-like: 0 4px 20px rgba(232, 93, 117, 0.4);
+  --shadow-dismiss: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
