@@ -10,7 +10,7 @@ Plan for building the product described in `PRD-v2.md`. Requirement IDs (`R-xx`,
 | Existing data | **Start fresh.** No listings or decisions are migrated. |
 | Scope | **Everything** in PRD-v2: Must, Should and Could. |
 | Stack | **Option A** from §2: Next.js on Vercel, Supabase, GitHub Actions, with server-side data access only. |
-| Database | A **new Supabase project**, so v1 is untouched until cut-over. |
+| Database | Postgres, reached over a plain connection string (`DATABASE_URL`). A new Supabase project was the choice, but the free plan's two-project limit is already used, so where it is hosted is **open again**. |
 | Branch | `v2` |
 | Password on the app URL | **No.** The URL is unlisted and kept out of search engines, but not password protected. |
 
@@ -75,7 +75,7 @@ Data: `listings`, `collection_runs`, and the fields in PRD §8. Row-level securi
 
 ## 5. Milestones
 
-**Progress:** milestone 1 done. Next: milestone 2.
+**Progress:** milestones 1–2 done. Next: milestone 3.
 
 Each milestone ends with something that can be checked. UI comes first, on sample data, so the feel can be tested on her phone before any scraping exists.
 

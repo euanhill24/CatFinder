@@ -23,6 +23,8 @@ npm run typecheck  # generates route types, then tsc
 npm test           # vitest, no network or keys needed
 npm run build
 npm run check      # all of the above, same as CI
+npm run db:migrate # apply db/migrations to DATABASE_URL
+npm run db:seed    # load the sample cats from fixtures/
 ```
 
 ## Layout
@@ -44,5 +46,6 @@ tests/
 - **One env file.** `.env.local` at the repo root, template in `.env.example`. Read configuration through `src/core/config.ts`, which throws `ConfigError` naming what is missing (N-09).
 - **Fail loudly.** A read that fails must render an error with the real reason, never an empty state (R-80).
 - **No AI wording in the interface.** Scores are presented as facts about the cat (R-23).
-- **Tests run offline.** Parsers are tested against saved pages in `fixtures/` (N-10).
+- **Tests run offline.** Database code is tested against an in-process Postgres (`tests/helpers/test-db.ts`) with the real migrations. Parsers are tested against saved pages in `fixtures/` (N-10).
+- **Database access** goes through the small `Db` interface in `src/server/db.ts` using plain SQL. Pass JSON parameters as strings cast `$n::text::jsonb`.
 - **Path alias:** `@/*` maps to `src/*`.

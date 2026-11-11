@@ -9,14 +9,18 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "db:migrate": "tsx --env-file-if-exists=.env.local db/cli.ts migrate",
+    "db:seed": "tsx --env-file-if-exists=.env.local db/cli.ts seed",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "next": "16.4.6",
+    "postgres": "^4.1.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^22",
     "@types/react": "^19",
@@ -24,6 +28,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5"
   },

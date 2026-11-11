@@ -1,36 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, getAppConfig, getCollectorConfig } from "@/core/config";
+import { ConfigError, getCollectorConfig, getDatabaseUrl } from "@/core/config";
 
-const full = {
-  SUPABASE_URL: "https://example.supabase.co",
-  SUPABASE_SECRET_KEY: "secret",
-  ANTHROPIC_API_KEY: "key",
-};
+const full = { DATABASE_URL: "postgres://example/db", ANTHROPIC_API_KEY: "key" };
 
 describe("config", () => {
-  it("returns app config when all values are present", () => {
-    expect(getAppConfig(full)).toEqual({
-      supabaseUrl: "https://example.supabase.co",
-      supabaseSecretKey: "secret",
-    });
+  it("returns the database URL when present", () => {
+    expect(getDatabaseUrl(full)).toBe("postgres://example/db");
   });
 
   it("names every missing value", () => {
     try {
-      getCollectorConfig({ SUPABASE_URL: "https://example.supabase.co" });
+      getCollectorConfig({});
       expect.unreachable();
     } catch (err) {
       expect(err).toBeInstanceOf(ConfigError);
-      expect((err as ConfigError).missing).toEqual(["SUPABASE_SECRET_KEY", "ANTHROPIC_API_KEY"]);
-      expect((err as Error).message).toContain("SUPABASE_SECRET_KEY, ANTHROPIC_API_KEY");
+      expect((err as ConfigError).missing).toEqual(["DATABASE_URL", "ANTHROPIC_API_KEY"]);
+      expect((err as Error).message).toContain("DATABASE_URL, ANTHROPIC_API_KEY");
     }
   });
 
   it("treats blank values as missing", () => {
-    expect(() => getAppConfig({ ...full, SUPABASE_SECRET_KEY: "  " })).toThrow(ConfigError);
+    expect(() => getDatabaseUrl({ DATABASE_URL: "  " })).toThrow(ConfigError);
   });
 
   it("does not require the scoring key for the app", () => {
-    expect(() => getAppConfig({ ...full, ANTHROPIC_API_KEY: undefined })).not.toThrow();
+    expect(() => getDatabaseUrl({ DATABASE_URL: "postgres://example/db" })).not.toThrow();
   });
 });

@@ -28,30 +28,18 @@ function read<K extends string>(names: readonly K[], env: Env): Record<K, string
   return Object.fromEntries(names.map((n) => [n, env[n]!.trim()])) as Record<K, string>;
 }
 
-const APP_VARS = ["SUPABASE_URL", "SUPABASE_SECRET_KEY"] as const;
-const COLLECTOR_VARS = [...APP_VARS, "ANTHROPIC_API_KEY"] as const;
-
-export interface AppConfig {
-  supabaseUrl: string;
-  supabaseSecretKey: string;
+/** Postgres connection string. All the web app needs. */
+export function getDatabaseUrl(env: Env = process.env): string {
+  return read(["DATABASE_URL"], env).DATABASE_URL;
 }
 
-export interface CollectorConfig extends AppConfig {
+export interface CollectorConfig {
+  databaseUrl: string;
   anthropicApiKey: string;
-}
-
-/** Configuration the web app needs to read and write listings. */
-export function getAppConfig(env: Env = process.env): AppConfig {
-  const v = read(APP_VARS, env);
-  return { supabaseUrl: v.SUPABASE_URL, supabaseSecretKey: v.SUPABASE_SECRET_KEY };
 }
 
 /** Configuration the collector needs: database access plus the scoring API. */
 export function getCollectorConfig(env: Env = process.env): CollectorConfig {
-  const v = read(COLLECTOR_VARS, env);
-  return {
-    supabaseUrl: v.SUPABASE_URL,
-    supabaseSecretKey: v.SUPABASE_SECRET_KEY,
-    anthropicApiKey: v.ANTHROPIC_API_KEY,
-  };
+  const v = read(["DATABASE_URL", "ANTHROPIC_API_KEY"], env);
+  return { databaseUrl: v.DATABASE_URL, anthropicApiKey: v.ANTHROPIC_API_KEY };
 }
