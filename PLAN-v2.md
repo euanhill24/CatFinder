@@ -75,7 +75,7 @@ Data: `listings`, `collection_runs`, and the fields in PRD §8. Row-level securi
 
 ## 5. Milestones
 
-**Progress:** milestones 1–2 done. Next: milestone 3.
+**Progress:** milestones 1–5 done, plus the stale-collection banner from milestone 12. Next: milestone 6 (deploy), which is waiting on where the database is hosted.
 
 Each milestone ends with something that can be checked. UI comes first, on sample data, so the feel can be tested on her phone before any scraping exists.
 

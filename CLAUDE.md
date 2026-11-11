@@ -22,7 +22,8 @@ npm run lint
 npm run typecheck  # generates route types, then tsc
 npm test           # vitest, no network or keys needed
 npm run build
-npm run check      # all of the above, same as CI
+npm run check      # all of the above
+E2E_DATABASE_URL=postgres://... npm run test:e2e   # browser tests; needs a build and a throwaway Postgres (it is wiped)
 npm run db:migrate # apply db/migrations to DATABASE_URL
 npm run db:seed    # load the sample cats from fixtures/
 ```
@@ -30,7 +31,8 @@ npm run db:seed    # load the sample cats from fixtures/
 ## Layout
 
 ```
-src/app/        screens and routes
+src/app/        routes
+src/components/ screens and UI pieces
 src/server/     the only code that touches the database
 src/core/       shared rules and types used by app and collector
 src/collector/  listing collection and scoring (runs on a schedule)
@@ -48,4 +50,5 @@ tests/
 - **No AI wording in the interface.** Scores are presented as facts about the cat (R-23).
 - **Tests run offline.** Database code is tested against an in-process Postgres (`tests/helpers/test-db.ts`) with the real migrations. Parsers are tested against saved pages in `fixtures/` (N-10).
 - **Database access** goes through the small `Db` interface in `src/server/db.ts` using plain SQL. Pass JSON parameters as strings cast `$n::text::jsonb`.
+- **Action buttons on the deck use `TapButton`.** Mobile browsers drop the click for a tap straight after a fast swipe; `TapButton` acts on the touch instead.
 - **Path alias:** `@/*` maps to `src/*`.

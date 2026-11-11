@@ -170,3 +170,8 @@ export async function getCollectionStatus(db: Db, now: Date = new Date()): Promi
   const last = row?.last ?? null;
   return { lastCheckedAt: last?.toISOString() ?? null, overdue: isCollectionOverdue(last, now) };
 }
+
+export async function getSavedCount(db: Db): Promise<number> {
+  const [row] = await db.query<{ n: number }>("select count(*)::int as n from listings where decision = 'liked'");
+  return row.n;
+}

@@ -31,3 +31,47 @@ body {
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Score bars fill in when a card appears (DESIGN.md, Motion). */
+@keyframes bar-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* A new top card settles into place. */
+@keyframes card-rise {
+  from {
+    transform: translateY(8px);
+    opacity: 0.6;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

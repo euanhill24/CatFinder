@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Nunito } from "next/font/google";
+import { ServiceWorker } from "@/components/ServiceWorker";
 import "./globals.css";
 
 const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"] });
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
   description: "Find your perfect ragdoll cat",
   // Private tool: keep it out of search engines.
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: "Kitty Tinder", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
@@ -22,7 +24,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${fraunces.variable} ${nunito.variable} h-full antialiased`}>
-      <body className="h-full font-sans">{children}</body>
+      <body className="h-full font-sans">
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }
